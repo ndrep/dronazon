@@ -4,8 +4,7 @@ import java.util.List;
 
 public interface Buffer {
 
-    void addMeasurement(Measurement m);
+  void addMeasurement(Measurement m);
 
-    List<Measurement> readAllAndClean();
-
+  List<Measurement> readAllAndClean();
 }
