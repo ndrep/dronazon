@@ -1,8 +1,11 @@
 package admin.server;
 
-import drone.Drone;
-import drone.DroneList;
+import beans.Drone;
+import beans.SmartCity;
+import java.util.List;
 import javax.ws.rs.*;
+import javax.ws.rs.core.GenericEntity;
+import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
 @Path("api")
@@ -12,7 +15,7 @@ public class ServerAdminService {
   @GET
   @Produces({"application/json"})
   public Response getListOfDrones() {
-    return Response.ok(DroneList.getInstance()).build();
+    return Response.ok(SmartCity.getInstance()).build();
   }
 
   @Path("last_n_statistics")
@@ -38,13 +41,14 @@ public class ServerAdminService {
 
   @Path("add")
   @POST
-  @Consumes("application/x-www-form-urlencoded;charset=UTF-8")
+  @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
   @Produces({"application/json"})
   public Response addDrone(
-      @FormParam("id") int id,
+      @FormParam("id") String id,
       @FormParam("port") String port,
       @FormParam("address") String address) {
-    DroneList.getInstance().add(new Drone(id, port, address));
-    return Response.ok("drone added correctly!").build();
+    List<Drone> list = SmartCity.getInstance().add(new Drone(id, port, address));
+    GenericEntity<List<Drone>> entity = new GenericEntity<List<Drone>>(list) {};
+    return Response.ok(entity).build();
   }
 }

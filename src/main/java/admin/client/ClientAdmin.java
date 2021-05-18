@@ -5,7 +5,6 @@ import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.WebResource;
 import com.sun.jersey.core.util.MultivaluedMapImpl;
 import java.util.Scanner;
-import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedMap;
 
 public class ClientAdmin {
@@ -20,7 +19,6 @@ public class ClientAdmin {
             + "* (2): last n° statistics              *\n"
             + "* (3): mean delivery between t1 and t2 *\n"
             + "* (4): mean km between t1 and t2       *\n"
-            + "* (5): add drone                       *\n"
             + "* (q): quit                            *\n"
             + "****************************************";
     String url = "http://localhost:6789";
@@ -52,8 +50,7 @@ public class ClientAdmin {
             System.out.println("Insert parameter");
             param.add("value", sc.next());
 
-            webResource =
-                client.resource(url + "/api/last_n_statistics").queryParams(param);
+            webResource = client.resource(url + "/api/last_n_statistics").queryParams(param);
             response = webResource.accept("application/json").get(ClientResponse.class);
 
             checkResponse();
@@ -69,8 +66,7 @@ public class ClientAdmin {
             System.out.println("Insert T2");
             param.add("t2", sc.next());
 
-            webResource =
-                client.resource(url + "/api/mean_of_delivery").queryParams(param);
+            webResource = client.resource(url + "/api/mean_of_delivery").queryParams(param);
             response = webResource.accept("application/json").get(ClientResponse.class);
 
             checkResponse();
@@ -86,8 +82,7 @@ public class ClientAdmin {
             System.out.println("Insert T2");
             param.add("t2", sc.next());
 
-            webResource =
-                client.resource(url + "/api/mean_of_km").queryParams(param);
+            webResource = client.resource(url + "/api/mean_of_km").queryParams(param);
             response = webResource.accept("application/json").get(ClientResponse.class);
 
             checkResponse();
@@ -97,26 +92,6 @@ public class ClientAdmin {
 
             System.out.println(menu);
             break;
-          case "5":
-            System.out.println("Insert id");
-            param.add("id", sc.next());
-            System.out.println("Insert port");
-            param.add("port", sc.next());
-            System.out.println("Insert address");
-            param.add("address", sc.next());
-
-            webResource = client.resource(url + "/api/add");
-            response =
-                webResource
-                    .type(MediaType.APPLICATION_FORM_URLENCODED_TYPE)
-                    .post(ClientResponse.class, param);
-
-            checkResponse();
-
-            System.out.println(response.getEntity(String.class));
-            System.out.println(menu);
-            break;
-
           default:
             System.out.println("Wrong option!\nRepeat please");
             System.out.println(menu);
