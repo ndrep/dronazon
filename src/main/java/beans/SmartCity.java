@@ -2,7 +2,6 @@ package beans;
 
 import java.awt.*;
 import java.util.ArrayList;
-import java.util.concurrent.ThreadLocalRandom;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlRootElement;
@@ -35,17 +34,7 @@ public class SmartCity {
   }
 
   public synchronized ArrayList<Drone> add(Drone drone) {
-    drone.setPoint(randomPoint());
-    if (list.isEmpty()) {
-      drone.setMaster(true);
-    }
-
     list.add(drone);
     return list;
-  }
-
-  private Point randomPoint() {
-    return new Point(
-        ThreadLocalRandom.current().nextInt(0, 10), ThreadLocalRandom.current().nextInt(0, 10));
   }
 }
