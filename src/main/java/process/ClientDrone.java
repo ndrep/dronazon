@@ -10,15 +10,17 @@ import com.sun.jersey.api.client.config.DefaultClientConfig;
 import com.sun.jersey.api.json.JSONConfiguration;
 import java.util.List;
 import java.util.Random;
+import java.util.Scanner;
 import org.codehaus.jackson.jaxrs.JacksonJsonProvider;
 
 public class ClientDrone {
-  public static int battery = 100;
+
   public static boolean master;
-  public static boolean partecipant;
+
   public static void main(String[] args) {
     String url = "http://localhost:6789";
     Random rand = new Random(System.currentTimeMillis());
+    Scanner sc = new Scanner(System.in);
 
     ClientConfig clientConfig = getClientConfig();
     Client client = Client.create(clientConfig);
@@ -42,7 +44,11 @@ public class ClientDrone {
 
     updateDrone(drone, list);
 
+    MutableStringInput inputString = new MutableStringInput();
+    QuitThread thread = new QuitThread(sc, inputString);
+    thread.start();
 
+    while (!inputString.getInput().equals("quit")) {}
   }
 
   private static void updateDrone(Drone drone, List<Drone> list) {
