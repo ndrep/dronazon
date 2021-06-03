@@ -1,5 +1,7 @@
 package dronazon;
 
+import com.google.gson.Gson;
+import java.awt.*;
 import org.eclipse.paho.client.mqttv3.*;
 
 public class Dronazon {
@@ -19,10 +21,11 @@ public class Dronazon {
       client.connect(connOpts);
       System.out.println(clientId + " Connected - Thread PID: " + Thread.currentThread().getId());
 
-
       int count = 0;
       while (true) {
-        String payload = "delivery number: " + count++;
+        Delivery delivery = new Delivery(count++);
+        Gson gson = new Gson();
+        String payload = gson.toJson(delivery);
         MqttMessage message = new MqttMessage(payload.getBytes());
 
         message.setQos(qos);
@@ -30,11 +33,11 @@ public class Dronazon {
 
         System.out.println(clientId + " Publishing message: " + payload);
         client.publish(topic, message);
-        System.out.println(clientId + " Message published - Thread PID: " + Thread.currentThread().getId());
-        
+        System.out.println(
+            clientId + " Message published - Thread PID: " + Thread.currentThread().getId());
+
         Thread.sleep(15000);
       }
-
 
     } catch (MqttException me) {
       System.out.println("reason " + me.getReasonCode());
@@ -43,7 +46,7 @@ public class Dronazon {
       System.out.println("cause " + me.getCause());
       System.out.println("excep " + me);
       me.printStackTrace();
-    } catch (Exception e){
+    } catch (Exception e) {
       e.printStackTrace();
     }
   }

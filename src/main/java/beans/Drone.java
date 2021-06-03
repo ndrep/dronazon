@@ -1,5 +1,6 @@
 package beans;
 
+import java.awt.*;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlRootElement;
@@ -13,6 +14,7 @@ public class Drone implements Comparable<Drone> {
   private String address;
   @JsonIgnore private Drone next;
   @JsonIgnore private int battery = 100;
+  @JsonIgnore private Point point;
 
   public Drone() {}
 
@@ -60,6 +62,14 @@ public class Drone implements Comparable<Drone> {
 
   public void setBattery(int battery) {
     this.battery = battery;
+  }
+
+  public Point getPoint() {
+    return point;
+  }
+
+  public void setPoint(Point point) {
+    this.point = point;
   }
 
   @Override
