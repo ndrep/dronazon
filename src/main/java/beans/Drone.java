@@ -8,35 +8,37 @@ import org.codehaus.jackson.annotate.JsonIgnore;
 
 @XmlRootElement
 @XmlAccessorType(XmlAccessType.FIELD)
-public class Drone implements Comparable<Drone> {
-  private String id;
-  private String port;
+public class Drone {
+  private int id;
+  private int port;
   private String address;
+  @JsonIgnore private boolean master;
   @JsonIgnore private Drone next;
   @JsonIgnore private int battery = 100;
   @JsonIgnore private Point point;
 
+
   public Drone() {}
 
-  public Drone(String id, String port, String address) {
+  public Drone(int id, int port, String address) {
     this.id = id;
     this.port = port;
     this.address = address;
   }
 
-  public String getId() {
+  public int getId() {
     return id;
   }
 
-  public void setId(String id) {
+  public void setId(int id) {
     this.id = id;
   }
 
-  public String getPort() {
+  public int getPort() {
     return port;
   }
 
-  public void setPort(String port) {
+  public void setPort(int port) {
     this.port = port;
   }
 
@@ -72,15 +74,11 @@ public class Drone implements Comparable<Drone> {
     this.point = point;
   }
 
-  @Override
-  public int compareTo(Drone drone) {
-    if (battery > drone.battery) {
-      return 1;
-    }
-    if (battery == drone.battery && Integer.parseInt(id) > Integer.parseInt(drone.getId())) {
-      return 1;
-    }
+  public boolean getMaster() {
+    return master;
+  }
 
-    return 0;
+  public void setMaster(boolean master) {
+    this.master = master;
   }
 }

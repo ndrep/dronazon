@@ -1,16 +1,12 @@
 syntax = "proto3";
 package com.example.grpc;
 
-message Hello {
-  int32 id = 1;
-  int32 x = 2;
-  int32 y = 3;
-}
+message Master {}
 
 message Response {
-  int32 id = 4;
+  int32 id = 1;
 }
 
-service DronePresentation {
-  rpc send(Hello) returns (Response);
+service DroneMaster {
+  rpc master(Master) returns (Response);
 }
