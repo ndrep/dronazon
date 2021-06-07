@@ -3,8 +3,21 @@ package com.example.grpc;
 
 message Master {}
 
+message Empty {}
+
 message Response {
   int32 id = 1;
+}
+
+message Drone {
+  int32 id = 1;
+  int32 port = 2;
+  string address = 3;
+  int32 next = 4;
+}
+
+service DronePresentation {
+  rpc info(Drone) returns (Empty);
 }
 
 service DroneMaster {

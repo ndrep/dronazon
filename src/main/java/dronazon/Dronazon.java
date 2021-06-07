@@ -1,7 +1,6 @@
 package dronazon;
 
 import com.google.gson.Gson;
-import java.awt.*;
 import org.eclipse.paho.client.mqttv3.*;
 
 public class Dronazon {

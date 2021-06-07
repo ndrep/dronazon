@@ -3,7 +3,11 @@ package process;
 import beans.Drone;
 import com.example.grpc.DroneMasterGrpc;
 import com.example.grpc.DroneMasterGrpc.*;
+import com.example.grpc.DronePresentationGrpc;
+import com.example.grpc.DronePresentationGrpc.*;
+import com.example.grpc.Hello;
 import com.example.grpc.Hello.*;
+import io.grpc.*;
 import io.grpc.stub.StreamObserver;
 import com.sun.jersey.api.client.Client;
 import com.sun.jersey.api.client.ClientResponse;
@@ -15,15 +19,13 @@ import com.sun.jersey.api.json.JSONConfiguration;
 
 import java.io.IOException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
-import io.grpc.Server;
-import io.grpc.ServerBuilder;
 import org.codehaus.jackson.jaxrs.JacksonJsonProvider;
 import org.eclipse.paho.client.mqttv3.*;
 
@@ -39,7 +41,6 @@ public class ClientDrone {
 
       WebResource webResource = client.resource(url + "/api/add");
 
-
       ClientResponse response =
               webResource.type("application/json").post(ClientResponse.class, drone);
 
@@ -49,12 +50,14 @@ public class ClientDrone {
 
       List<Drone> list = response.getEntity(new GenericType<List<Drone>>() {
       });
-      list.sort(Comparator.comparing(Drone::getId));
 
       updateRingDrone(drone, list);
 
-      Server server = ServerBuilder.forPort(drone.getPort()).addService(new DroneMasterImpl(list)).build();
-      server.start();
+      Server service = ServerBuilder.forPort(drone.getPort())
+              .addService(new DroneMasterImpl(list))
+              .addService(new DronePresentationImpl(list))
+              .build();
+      service.start();
 
       MutableFlag flag = new MutableFlag();
       Quit thread = new Quit(flag);
@@ -63,8 +66,11 @@ public class ClientDrone {
       if (drone.getMaster())
         subscribe();
       else {
-        asynchronousStreamCall(drone);
+        asynchronousGetMaster(drone);
+        asynchronousDronePresentation(drone, list);
       }
+
+      list.sort(Comparator.comparing(Drone::getId));
 
       while (flag.getFlag() && drone.getBattery() >= 15) {
         Thread.sleep(1000);
@@ -77,7 +83,7 @@ public class ClientDrone {
     }
   }
 
-  private static void asynchronousStreamCall(Drone drone) throws InterruptedException {
+  private static void asynchronousGetMaster(Drone drone) throws InterruptedException {
     final ManagedChannel channel = ManagedChannelBuilder.forTarget(drone.getNext().getAddress() + ":" + drone.getNext().getPort()).usePlaintext().build();
 
     DroneMasterStub stub = DroneMasterGrpc.newStub(channel);
@@ -86,8 +92,8 @@ public class ClientDrone {
 
     stub.master(request, new StreamObserver<Response>() {
 
-      public void onNext(Response Response) {
-        System.out.println(Response.getId());
+      public void onNext(Response response) {
+        System.out.println(response.getId());
       }
 
       public void onError(Throwable throwable) {
@@ -99,6 +105,37 @@ public class ClientDrone {
       }
     });
     channel.awaitTermination(1, TimeUnit.MINUTES);
+  }
+
+  private static void asynchronousDronePresentation(Drone drone, List<Drone> list) throws InterruptedException {
+    List<Drone>  clean = list.stream().filter(d -> d.getId() != drone.getId()).collect(Collectors.toList());
+
+    for (Drone d: clean) {
+      final ManagedChannel channel = ManagedChannelBuilder.forTarget(d.getAddress() + ":" + d.getPort()).usePlaintext().build();
+
+      DronePresentationStub stub = DronePresentationGrpc.newStub(channel);
+
+      Hello.Drone request = Hello.Drone.newBuilder()
+              .setId(drone.getId())
+              .setPort(drone.getPort())
+              .setAddress(drone.getAddress())
+              .setNext(drone.getNext().getId())
+              .build();
+
+      stub.info(request, new StreamObserver<Empty>(){
+        public void onNext(Empty response) {
+        }
+
+        public void onError(Throwable throwable) {
+          System.out.println("Error! " + throwable.getMessage());
+        }
+
+        public void onCompleted() {
+          channel.shutdownNow();
+        }
+      });
+      channel.awaitTermination(1, TimeUnit.MINUTES);
+    }
   }
 
   private static void updateRingDrone(Drone drone, List<Drone> list) {
@@ -173,7 +210,7 @@ public class ClientDrone {
             }
 
             public void deliveryComplete(IMqttDeliveryToken token) {
-              // Not used here
+
             }
           });
       System.out.println(
