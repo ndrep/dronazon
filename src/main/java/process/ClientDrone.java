@@ -19,10 +19,7 @@ import com.sun.jersey.api.json.JSONConfiguration;
 
 import java.io.IOException;
 import java.sql.Timestamp;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -30,6 +27,9 @@ import org.codehaus.jackson.jaxrs.JacksonJsonProvider;
 import org.eclipse.paho.client.mqttv3.*;
 
 public class ClientDrone {
+
+  private static int guard;
+
   public static void main(String[] args) {
     String url = "http://localhost:6789";
     Random rand = new Random(System.currentTimeMillis());
@@ -59,10 +59,6 @@ public class ClientDrone {
               .build();
       service.start();
 
-      MutableFlag flag = new MutableFlag();
-      Quit thread = new Quit(flag);
-      thread.start();
-
       if (drone.getMaster())
         subscribe();
       else {
@@ -72,8 +68,14 @@ public class ClientDrone {
 
       list.sort(Comparator.comparing(Drone::getId));
 
-      while (flag.getFlag() && drone.getBattery() >= 15) {
-        Thread.sleep(1000);
+      ExitThread exit = new ExitThread();
+      exit.start();
+      synchronized (exit){
+        try {
+          exit.wait();
+        }catch (InterruptedException e){
+          e.printStackTrace();
+        }
       }
 
       System.exit(0);
