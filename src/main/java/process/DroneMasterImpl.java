@@ -1,26 +1,26 @@
 package process;
 
+import beans.Drone;
 import com.example.grpc.DroneMasterGrpc.DroneMasterImplBase;
 import com.example.grpc.Hello.*;
 import io.grpc.stub.StreamObserver;
-import beans.Drone;
-
 import java.util.List;
 
 public class DroneMasterImpl extends DroneMasterImplBase {
-    private final List<Drone> list;
-    public DroneMasterImpl(List<Drone> list){
-        this.list = list;
-    }
+  private final List<Drone> list;
 
-    @Override
-    public void master(Master request, StreamObserver<Response> responseObserver) {
-        Drone master = list.stream().filter(Drone::getMaster).findAny().get();
+  public DroneMasterImpl(List<Drone> list) {
+    this.list = list;
+  }
 
-        Response response = Response.newBuilder().setId(master.getId()).build();
+  @Override
+  public void master(Master request, StreamObserver<Response> responseObserver) {
+    Drone master = list.stream().filter(Drone::getMaster).findAny().get();
 
-        responseObserver.onNext(response);
+    Response response = Response.newBuilder().setId(master.getId()).build();
 
-        responseObserver.onCompleted();
-    }
+    responseObserver.onNext(response);
+
+    responseObserver.onCompleted();
+  }
 }

@@ -17,7 +17,6 @@ public class Drone {
   @JsonIgnore private int battery = 100;
   @JsonIgnore private Point point;
 
-
   public Drone() {}
 
   public Drone(int id, int port, String address) {
@@ -81,5 +80,4 @@ public class Drone {
   public void setMaster(boolean master) {
     this.master = master;
   }
-
 }

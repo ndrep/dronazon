@@ -2,7 +2,8 @@ package admin.server;
 
 import beans.Drone;
 import beans.SmartCity;
-
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import java.awt.*;
 import java.util.List;
 import java.util.Random;
@@ -39,6 +40,17 @@ public class ServerAdminService {
   @Produces({"application/json"})
   public Response getMeanOfKm(@QueryParam("t1") String t1, @QueryParam("t2") String t2) {
     return Response.ok("mean of km between " + t1 + " and " + t2).build();
+  }
+
+  @Path("point")
+  @GET
+  @Produces({"application/json"})
+  public Response getPoint() {
+    GsonBuilder builder = new GsonBuilder();
+    Random rand = new Random(System.currentTimeMillis());
+    Point point = new Point(rand.nextInt(10), rand.nextInt(10));
+    Gson gson = builder.create();
+    return Response.ok(gson.toJson(point)).build();
   }
 
   @Path("add")
