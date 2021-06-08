@@ -16,19 +16,18 @@ import com.sun.jersey.api.client.WebResource;
 import com.sun.jersey.api.client.config.ClientConfig;
 import com.sun.jersey.api.client.config.DefaultClientConfig;
 import com.sun.jersey.api.json.JSONConfiguration;
-
 import java.io.IOException;
 import java.sql.Timestamp;
 import java.util.*;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-
 import org.codehaus.jackson.jaxrs.JacksonJsonProvider;
 import org.eclipse.paho.client.mqttv3.*;
 
 public class ClientDrone {
 
-  private static int guard;
+  private static int idMaster;
 
   public static void main(String[] args) {
     String url = "http://localhost:6789";
@@ -51,7 +50,11 @@ public class ClientDrone {
       List<Drone> list = response.getEntity(new GenericType<List<Drone>>() {
       });
 
-      updateRingDrone(drone, list);
+      list.sort(Comparator.comparing(Drone::getId));
+
+      if (list.size() == 1)
+        list.get(0).setMaster(true);
+
 
       Server service = ServerBuilder.forPort(drone.getPort())
               .addService(new DroneMasterImpl(list))
@@ -59,14 +62,13 @@ public class ClientDrone {
               .build();
       service.start();
 
-      if (drone.getMaster())
+      if (find(drone, list).getMaster()) {
         subscribe();
-      else {
-        asynchronousGetMaster(drone);
+      }else {
+        asynchronousGetMaster(drone, list);
         asynchronousDronePresentation(drone, list);
       }
 
-      list.sort(Comparator.comparing(Drone::getId));
 
       ExitThread exit = new ExitThread();
       exit.start();
@@ -85,8 +87,15 @@ public class ClientDrone {
     }
   }
 
-  private static void asynchronousGetMaster(Drone drone) throws InterruptedException {
-    final ManagedChannel channel = ManagedChannelBuilder.forTarget(drone.getNext().getAddress() + ":" + drone.getNext().getPort()).usePlaintext().build();
+  private static Drone find(Drone drone, List<Drone> list) {
+    return list.stream().filter(d -> d.getId() == drone.getId()).findFirst().get();
+  }
+
+  private static void asynchronousGetMaster(Drone drone, List<Drone> list) throws InterruptedException {
+    int index = list.indexOf(find(drone, list));
+    Drone next = list.get((index + 1) % list.size());
+
+    final ManagedChannel channel = ManagedChannelBuilder.forTarget(next.getAddress() + ":" + next.getPort()).usePlaintext().build();
 
     DroneMasterStub stub = DroneMasterGrpc.newStub(channel);
 
@@ -95,7 +104,7 @@ public class ClientDrone {
     stub.master(request, new StreamObserver<Response>() {
 
       public void onNext(Response response) {
-        System.out.println(response.getId());
+        idMaster = response.getId();
       }
 
       public void onError(Throwable throwable) {
@@ -106,13 +115,15 @@ public class ClientDrone {
         channel.shutdownNow();
       }
     });
-    channel.awaitTermination(1, TimeUnit.MINUTES);
+    channel.awaitTermination(1, TimeUnit.SECONDS);
   }
 
   private static void asynchronousDronePresentation(Drone drone, List<Drone> list) throws InterruptedException {
-    List<Drone>  clean = list.stream().filter(d -> d.getId() != drone.getId()).collect(Collectors.toList());
+    Drone dr = find(drone, list);
+    List<Drone>  clean = list.stream().filter(d -> d.getId() != dr.getId()).collect(Collectors.toList());
 
     for (Drone d: clean) {
+
       final ManagedChannel channel = ManagedChannelBuilder.forTarget(d.getAddress() + ":" + d.getPort()).usePlaintext().build();
 
       DronePresentationStub stub = DronePresentationGrpc.newStub(channel);
@@ -121,41 +132,24 @@ public class ClientDrone {
               .setId(drone.getId())
               .setPort(drone.getPort())
               .setAddress(drone.getAddress())
-              .setNext(drone.getNext().getId())
               .build();
 
       stub.info(request, new StreamObserver<Empty>(){
-        public void onNext(Empty response) {
-        }
+        public void onNext(Empty response) {}
 
         public void onError(Throwable throwable) {
           System.out.println("Error! " + throwable.getMessage());
+          System.out.println("Error! " + throwable.getCause());
+          System.out.println("Error! " + throwable.getLocalizedMessage());
+          System.out.println("Error! " + Arrays.toString(throwable.getStackTrace()));
         }
 
         public void onCompleted() {
           channel.shutdownNow();
         }
       });
-      channel.awaitTermination(1, TimeUnit.MINUTES);
+      channel.awaitTermination(1, TimeUnit.SECONDS);
     }
-  }
-
-  private static void updateRingDrone(Drone drone, List<Drone> list) {
-    if (list.size() == 1)
-      setDroneMaster(drone, list);
-
-    drone.setNext(list.get(0));
-    for (Drone d : list) {
-      if (d.getNext() == list.get(0)) {
-        d.setNext(drone);
-        break;
-      }
-    }
-  }
-
-  private static void setDroneMaster(Drone drone, List<Drone> list){
-    drone.setMaster(true);
-    list.stream().filter(d -> drone.getId() == d.getId()).findAny().get().setMaster(true);
   }
 
   private static ClientConfig getClientConfig() {

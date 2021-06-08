@@ -81,4 +81,5 @@ public class Drone {
   public void setMaster(boolean master) {
     this.master = master;
   }
+
 }

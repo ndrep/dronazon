@@ -46,8 +46,6 @@ public class ServerAdminService {
   @Consumes({"application/json"})
   @Produces({"application/json"})
   public Response addDrone(Drone drone) {
-    Random rand = new Random(System.currentTimeMillis());
-    drone.setPoint(new Point(rand.nextInt(10), rand.nextInt(10)));
     List<Drone> list = SmartCity.getInstance().add(drone);
     GenericEntity<List<Drone>> entity = new GenericEntity<List<Drone>>(list) {};
     return Response.status(200).entity(entity).build();
