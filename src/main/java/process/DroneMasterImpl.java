@@ -8,16 +8,16 @@ import java.util.List;
 
 public class DroneMasterImpl extends DroneMasterImplBase {
   private final List<Drone> list;
+  private final Drone drone;
 
-  public DroneMasterImpl(List<Drone> list) {
+  public DroneMasterImpl(Drone drone, List<Drone> list) {
+    this.drone = drone;
     this.list = list;
   }
 
   @Override
-  public void master(Master request, StreamObserver<Response> responseObserver) {
-    Drone master = list.stream().filter(Drone::getMaster).findAny().get();
-
-    Response response = Response.newBuilder().setId(master.getId()).build();
+  public void master(Empty request, StreamObserver<Response> responseObserver) {
+    Response response = Response.newBuilder().setId(drone.getIdMaster()).build();
 
     responseObserver.onNext(response);
 

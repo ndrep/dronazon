@@ -1,9 +1,23 @@
 syntax = "proto3";
 package com.example.grpc;
 
-message Master {}
-
 message Empty {}
+
+message Statistics {
+  int32 id = 1;
+  int32 start_x = 2;
+  int32 start_y = 3;
+  int32 power = 4;
+}
+
+message Delivery {
+  int32 id = 1;
+  int32 start_x = 2;
+  int32 start_y = 3;
+  int32 end_x = 4;
+  int32 end_y = 5;
+  int32 id_driver = 6;
+}
 
 message Response {
   int32 id = 1;
@@ -17,10 +31,14 @@ message Drone {
   int32 y = 5;
 }
 
+service DroneDelivery {
+  rpc delivery(Delivery) returns (Statistics);
+}
+
 service DronePresentation {
   rpc info(Drone) returns (Empty);
 }
 
 service DroneMaster {
-  rpc master(Master) returns (Response);
+  rpc master(Empty) returns (Response);
 }

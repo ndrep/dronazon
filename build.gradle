@@ -2,6 +2,7 @@ plugins {
 	id "com.google.protobuf" version "0.8.10"
 	id "java"
 	id "war"
+	id "com.diffplug.spotless" version "5.12.4"
 }
 
 group 'org.example'
@@ -62,7 +63,17 @@ protobuf {
 	}
 }
 
-
+spotless {
+	format 'misc', {
+		target '*.gradle', '*.md', '.gitignore'
+		trimTrailingWhitespace()
+		indentWithTabs() // or spaces. Takes an integer argument if you don't like 4
+		endWithNewline()
+	}
+	java {
+		googleJavaFormat()
+	}
+}
 
 
 test {

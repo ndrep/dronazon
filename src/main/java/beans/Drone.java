@@ -12,10 +12,10 @@ public class Drone {
   private int id;
   private int port;
   private String address;
-  @JsonIgnore private boolean master;
-  @JsonIgnore private Drone next;
   @JsonIgnore private int battery = 100;
+  @JsonIgnore private boolean available = true;
   @JsonIgnore private Point point;
+  @JsonIgnore private int idMaster;
 
   public Drone() {}
 
@@ -49,14 +49,6 @@ public class Drone {
     this.address = address;
   }
 
-  public Drone getNext() {
-    return next;
-  }
-
-  public void setNext(Drone next) {
-    this.next = next;
-  }
-
   public int getBattery() {
     return battery;
   }
@@ -73,11 +65,36 @@ public class Drone {
     this.point = point;
   }
 
-  public boolean getMaster() {
-    return master;
+  public boolean getAvailable() {
+    return available;
   }
 
-  public void setMaster(boolean master) {
-    this.master = master;
+  public int getIdMaster() {
+    return idMaster;
+  }
+
+  public void setIdMaster(int idMaster) {
+    this.idMaster = idMaster;
+  }
+
+  public void setAvailable(boolean available) {
+    this.available = available;
+  }
+
+  @Override
+  public String toString() {
+    return "Drone{"
+        + "id="
+        + id
+        + ", port="
+        + port
+        + ", address='"
+        + address
+        + '\''
+        + ", battery="
+        + battery
+        + ", point="
+        + point
+        + '}';
   }
 }

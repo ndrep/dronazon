@@ -4,10 +4,7 @@ import beans.Drone;
 import com.example.grpc.DronePresentationGrpc.*;
 import com.example.grpc.Hello;
 import com.example.grpc.Hello.*;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import io.grpc.stub.StreamObserver;
-
 import java.awt.*;
 import java.util.Comparator;
 import java.util.List;
@@ -15,26 +12,29 @@ import java.util.List;
 public class DronePresentationImpl extends DronePresentationImplBase {
 
   private final List<Drone> list;
+  private final Drone drone;
 
-  public DronePresentationImpl(List<Drone> list) {
+  public DronePresentationImpl(Drone drone, List<Drone> list) {
+    this.drone = drone;
     this.list = list;
   }
 
   @Override
   public void info(Hello.Drone request, StreamObserver<Empty> responseObserver) {
-    Drone drone = new Drone(request.getId(), request.getPort(), request.getAddress());
-    drone.setPoint(new Point(request.getX(), request.getY()));
+    Drone inDrone = new Drone(request.getId(), request.getPort(), request.getAddress());
 
-    list.add(drone);
+    if (isMasterDrone()) inDrone.setPoint(new Point(request.getX(), request.getY()));
+
+    list.add(inDrone);
 
     list.sort(Comparator.comparing(Drone::getId));
 
-    printlist(list);
+    responseObserver.onNext(Hello.Empty.newBuilder().build());
+
+    responseObserver.onCompleted();
   }
 
-  private static void printlist(List<Drone> list){
-    GsonBuilder builder = new GsonBuilder().setPrettyPrinting();
-    Gson gson = builder.create();
-    System.out.println(gson.toJson(list));
+  private boolean isMasterDrone() {
+    return drone.getIdMaster() == drone.getId();
   }
 }

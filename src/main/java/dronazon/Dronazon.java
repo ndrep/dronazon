@@ -35,7 +35,7 @@ public class Dronazon {
         System.out.println(
             clientId + " Message published - Thread PID: " + Thread.currentThread().getId());
 
-        Thread.sleep(15000);
+        Thread.sleep(10000);
       }
 
     } catch (MqttException me) {

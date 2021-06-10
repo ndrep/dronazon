@@ -14,4 +14,16 @@ public class Delivery {
     start = new Point(rand.nextInt(10), rand.nextInt(10));
     end = new Point(rand.nextInt(10), rand.nextInt(10));
   }
+
+  public int getId() {
+    return id;
+  }
+
+  public Point getStart() {
+    return start;
+  }
+
+  public Point getEnd() {
+    return end;
+  }
 }
