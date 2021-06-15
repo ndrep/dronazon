@@ -23,52 +23,52 @@ import io.grpc.*;
 import io.grpc.stub.StreamObserver;
 import java.awt.Point;
 import java.io.IOException;
-import java.sql.Timestamp;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import org.codehaus.jackson.jaxrs.JacksonJsonProvider;
 import org.eclipse.paho.client.mqttv3.*;
 
 public class ClientDrone {
 
-  private static Drone drone;
+  private final Drone drone;
+  private static final Logger LOGGER = Logger.getLogger(ClientDrone.class.getSimpleName());
+
+  public ClientDrone(Drone drone) {
+    this.drone = drone;
+  }
 
   public static void main(String[] args) {
     String url = "http://localhost:6789";
     Random rand = new Random(System.currentTimeMillis());
-    drone = new Drone(rand.nextInt(100), rand.nextInt(8080) + 1000, "localhost");
+    ClientDrone droneClient =
+        new ClientDrone(new Drone(rand.nextInt(100), rand.nextInt(8080) + 1000, "localhost"));
+    Drone drone = droneClient.drone;
+
+    ClientConfig clientConfig = droneClient.getClientConfig();
+    Client client = Client.create(clientConfig);
+
+    List<Drone> list = droneClient.getDroneList(url, client);
+    Point point = droneClient.getStartPoint(url, client);
+
+    droneClient.findDrone(drone, list).setPoint(point);
+
+    list.sort(Comparator.comparing(Drone::getId));
+
+    if (list.size() == 1) {
+      drone.setIdMaster(drone.getId());
+    }
 
     try {
-      ClientConfig clientConfig = getClientConfig();
-      Client client = Client.create(clientConfig);
+      startAllGrpcServices(drone, list);
 
-      List<Drone> list = getDroneList(url, client);
-
-      Point point = getStartPoint(url, client);
-
-      findDrone(drone, list).setPoint(point);
-
-      list.sort(Comparator.comparing(Drone::getId));
-
-      if (isMasterDrone(list.size(), 1)) {
-        drone.setIdMaster(drone.getId());
-      }
-
-      Server service =
-          ServerBuilder.forPort(drone.getPort())
-              .addService(new DroneMasterImpl(drone, list))
-              .addService(new DronePresentationImpl(drone, list))
-              .addService(new DroneDeliveryImpl(drone, list))
-              .build();
-      service.start();
-
-      if (isMasterDrone(drone.getIdMaster(), drone.getId())) {
-        subscribe(list);
+      if (droneClient.isMaster(drone.getIdMaster(), drone.getId())) {
+        droneClient.subscribe(list);
       } else {
-        asynchronousGetMaster(drone, list);
-        asynchronousDronePresentation(drone, list);
+        droneClient.asynchronousGetMaster(drone, list);
+        droneClient.asynchronousDronePresentation(drone, list);
       }
 
       ExitThread exit = new ExitThread();
@@ -88,11 +88,22 @@ public class ClientDrone {
     }
   }
 
-  private static boolean isMasterDrone(int idMaster, int id) {
+  private static void startAllGrpcServices(Drone drone, List<Drone> list) throws IOException {
+    Server service =
+        ServerBuilder.forPort(drone.getPort())
+            .addService(new DroneMasterImpl(drone, list))
+            .addService(new DronePresentationImpl(drone, list))
+            .addService(new DroneDeliveryImpl(drone, list))
+            .addService(new InfoUpdatedImpl(drone, list))
+            .build();
+    service.start();
+  }
+
+  private boolean isMaster(int idMaster, int id) {
     return idMaster == id;
   }
 
-  private static Point getStartPoint(String url, Client client) {
+  private Point getStartPoint(String url, Client client) {
     WebResource webResource = client.resource(url + "/api/point");
 
     ClientResponse info_point = webResource.type("application/json").get(ClientResponse.class);
@@ -104,7 +115,7 @@ public class ClientDrone {
     return info_point.getEntity(Point.class);
   }
 
-  private static List<Drone> getDroneList(String url, Client client) {
+  private List<Drone> getDroneList(String url, Client client) {
     WebResource webResource = client.resource(url + "/api/add");
 
     ClientResponse response =
@@ -117,15 +128,11 @@ public class ClientDrone {
     return response.getEntity(new GenericType<List<Drone>>() {});
   }
 
-  private static Drone findDrone(Drone drone, List<Drone> list) {
-    return list.stream()
-        .filter(d -> isMasterDrone(d.getId(), drone.getId()))
-        .findFirst()
-        .orElse(null);
+  private Drone findDrone(Drone drone, List<Drone> list) {
+    return list.stream().filter(d -> isMaster(d.getId(), drone.getId())).findFirst().orElse(null);
   }
 
-  private static void asynchronousGetMaster(Drone drone, List<Drone> list)
-      throws InterruptedException {
+  private void asynchronousGetMaster(Drone drone, List<Drone> list) throws InterruptedException {
     Drone next = getNextDrone(drone, list);
 
     final ManagedChannel channel =
@@ -144,7 +151,7 @@ public class ClientDrone {
           public void onNext(Response response) {
             drone.setIdMaster(
                 list.stream()
-                    .filter(d -> isMasterDrone(d.getId(), response.getId()))
+                    .filter(d -> isMaster(d.getId(), response.getId()))
                     .findFirst()
                     .get()
                     .getId());
@@ -161,12 +168,12 @@ public class ClientDrone {
     channel.awaitTermination(1, TimeUnit.MINUTES);
   }
 
-  private static Drone getNextDrone(Drone drone, List<Drone> list) {
+  private Drone getNextDrone(Drone drone, List<Drone> list) {
     int index = list.indexOf(findDrone(drone, list));
     return list.get((index + 1) % list.size());
   }
 
-  private static void asynchronousDronePresentation(Drone drone, List<Drone> list)
+  private void asynchronousDronePresentation(Drone drone, List<Drone> list)
       throws InterruptedException {
     Drone dr = findDrone(drone, list);
     List<Drone> clean =
@@ -207,14 +214,14 @@ public class ClientDrone {
     }
   }
 
-  private static ClientConfig getClientConfig() {
+  private ClientConfig getClientConfig() {
     ClientConfig clientConfig = new DefaultClientConfig();
     clientConfig.getFeatures().put(JSONConfiguration.FEATURE_POJO_MAPPING, Boolean.TRUE);
     clientConfig.getClasses().add(JacksonJsonProvider.class);
     return clientConfig;
   }
 
-  private static void subscribe(List<Drone> list) {
+  private void subscribe(List<Drone> list) {
     MqttClient client;
     String broker = "tcp://localhost:1883";
     String clientId = MqttClient.generateClientId();
@@ -226,59 +233,49 @@ public class ClientDrone {
       MqttConnectOptions connOpts = new MqttConnectOptions();
       connOpts.setCleanSession(true);
 
-      System.out.println(clientId + " Connecting Broker " + broker);
       client.connect(connOpts);
-      System.out.println(clientId + " Connected - Thread PID: " + Thread.currentThread().getId());
 
       client.setCallback(
           new MqttCallback() {
 
             public void messageArrived(String topic, MqttMessage message)
                 throws InterruptedException {
-              String time = new Timestamp(System.currentTimeMillis()).toString();
               String receivedMessage = new String(message.getPayload());
-              System.out.println(
-                  clientId
-                      + " Received a Message! - Callback - Thread PID: "
-                      + Thread.currentThread().getId()
-                      + "\n\tTime:    "
-                      + time
-                      + "\n\tMessage: "
-                      + receivedMessage);
+              LOGGER.info("\tMessage: " + receivedMessage + "\n");
 
               Gson gson = new GsonBuilder().create();
               Delivery delivery = gson.fromJson(receivedMessage, Delivery.class);
               int idDriver = defineDroneOfDelivery(list, delivery.getStart()).getId();
+              list.get(list.indexOf(searchDroneInList(idDriver, list))).setAvailable(false);
+
+              LOGGER.info("\nlista non aggiornata\n");
+              for (Drone d: list) {
+                LOGGER.info(d.toString());
+              }
 
               asynchronousDelivery(delivery, idDriver, list);
 
-              for (Drone d : list) {
-                System.out.println(d.toString());
+              LOGGER.info("\nlista aggiornata\n");
+              for (Drone d: list) {
+                LOGGER.info(d.toString());
               }
             }
 
             public void connectionLost(Throwable cause) {
-              System.out.println(
-                  clientId
-                      + " Connectionlost! cause:"
-                      + cause.getMessage()
-                      + "-  Thread PID: "
-                      + Thread.currentThread().getId());
+              cause.printStackTrace();
             }
 
             public void deliveryComplete(IMqttDeliveryToken token) {}
           });
-      System.out.println(
-          clientId + " Subscribing ... - Thread PID: " + Thread.currentThread().getId());
+
       client.subscribe(topic, qos);
-      System.out.println(clientId + " Subscribed to topics : " + topic);
 
     } catch (MqttException me) {
       me.printStackTrace();
     }
   }
 
-  private static void asynchronousDelivery(Delivery delivery, int driver, List<Drone> list)
+  private void asynchronousDelivery(Delivery delivery, int driver, List<Drone> list)
       throws InterruptedException {
     Drone next = getNextDrone(drone, list);
 
@@ -295,20 +292,14 @@ public class ClientDrone {
             .setStartX((int) delivery.getStart().getX())
             .setStartY((int) delivery.getStart().getY())
             .setEndX((int) delivery.getEnd().getX())
-            .setEndY((int) +delivery.getEnd().getY())
+            .setEndY((int) delivery.getEnd().getY())
             .setIdDriver(driver)
             .build();
 
     stub.delivery(
         request,
-        new StreamObserver<Statistics>() {
-          public void onNext(Statistics response) {
-            Drone updateDrone = list.get(list.indexOf(searchDroneInList(response.getId(), list)));
-
-            updateDrone.setAvailable(true);
-            updateDrone.setBattery(response.getPower());
-            updateDrone.setPoint(new Point(response.getStartX(), response.getStartY()));
-          }
+        new StreamObserver<Empty>() {
+          public void onNext(Empty response) {}
 
           public void onError(Throwable throwable) {
             System.out.println("Error! " + throwable.getMessage());
@@ -321,17 +312,14 @@ public class ClientDrone {
     channel.awaitTermination(1, TimeUnit.MINUTES);
   }
 
-  private static Drone searchDroneInList(int id, List<Drone> list) {
-    return list.stream().filter(d -> d.getId() == id).findFirst().get();
+  private Drone defineDroneOfDelivery(List<Drone> list, Point point) {
+    return list.stream()
+        .filter(Drone::getAvailable)
+        .min(Comparator.comparing(d -> d.getPoint().distance(point)))
+        .orElse(null);
   }
 
-  private static Drone defineDroneOfDelivery(List<Drone> list, Point point) {
-    Drone driver =
-        list.stream()
-            .filter(Drone::getAvailable)
-            .min(Comparator.comparing(d -> d.getPoint().distance(point)))
-            .orElse(null);
-    findDrone(driver, list).setAvailable(false);
-    return driver;
+  private Drone searchDroneInList(int id, List<Drone> list) {
+    return list.stream().filter(d -> d.getId() == id).findFirst().get();
   }
 }

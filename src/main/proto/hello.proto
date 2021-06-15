@@ -3,13 +3,6 @@ package com.example.grpc;
 
 message Empty {}
 
-message Statistics {
-  int32 id = 1;
-  int32 start_x = 2;
-  int32 start_y = 3;
-  int32 power = 4;
-}
-
 message Delivery {
   int32 id = 1;
   int32 start_x = 2;
@@ -31,8 +24,21 @@ message Drone {
   int32 y = 5;
 }
 
+message DroneInfo {
+  int32 id = 1;
+  int32 battery = 2;
+  int32 x = 3;
+  int32 y = 4;
+  string timestamp = 5;
+  double km = 6;
+}
+
+service InfoUpdated {
+  rpc message(DroneInfo) returns (Empty);
+}
+
 service DroneDelivery {
-  rpc delivery(Delivery) returns (Statistics);
+  rpc delivery(Delivery) returns (Empty);
 }
 
 service DronePresentation {

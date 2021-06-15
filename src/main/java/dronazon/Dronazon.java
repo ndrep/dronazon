@@ -16,35 +16,26 @@ public class Dronazon {
       connOpts.setCleanSession(true);
       connOpts.setKeepAliveInterval(60);
 
-      System.out.println(clientId + " Connecting Broker " + broker);
+      System.out.println(" Connecting Broker " + broker);
       client.connect(connOpts);
-      System.out.println(clientId + " Connected - Thread PID: " + Thread.currentThread().getId());
 
       int count = 0;
+      Gson gson = new Gson();
+
       while (true) {
         Delivery delivery = new Delivery(count++);
-        Gson gson = new Gson();
         String payload = gson.toJson(delivery);
         MqttMessage message = new MqttMessage(payload.getBytes());
 
         message.setQos(qos);
-        message.setRetained(false);
+        message.setRetained(true);
 
-        System.out.println(clientId + " Publishing message: " + payload);
+        System.out.println("ORDER: " + payload);
         client.publish(topic, message);
-        System.out.println(
-            clientId + " Message published - Thread PID: " + Thread.currentThread().getId());
 
         Thread.sleep(10000);
       }
 
-    } catch (MqttException me) {
-      System.out.println("reason " + me.getReasonCode());
-      System.out.println("msg " + me.getMessage());
-      System.out.println("loc " + me.getLocalizedMessage());
-      System.out.println("cause " + me.getCause());
-      System.out.println("excep " + me);
-      me.printStackTrace();
     } catch (Exception e) {
       e.printStackTrace();
     }

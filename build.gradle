@@ -2,7 +2,7 @@ plugins {
 	id "com.google.protobuf" version "0.8.10"
 	id "java"
 	id "war"
-	id "com.diffplug.spotless" version "5.12.4"
+	//id "com.diffplug.spotless" version "5.12.4"
 }
 
 group 'org.example'
@@ -62,7 +62,7 @@ protobuf {
 		}
 	}
 }
-
+/*
 spotless {
 	format 'misc', {
 		target '*.gradle', '*.md', '.gitignore'
@@ -74,8 +74,7 @@ spotless {
 		googleJavaFormat()
 	}
 }
-
-
+*/
 test {
 	useJUnitPlatform()
 }

@@ -14,6 +14,7 @@ public class ExitThread extends Thread {
           notify();
           break;
         }
+        input = sc.nextLine().toLowerCase(Locale.ROOT);
       }
     }
   }
