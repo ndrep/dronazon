@@ -13,7 +13,6 @@ public class InfoUpdatedImpl extends InfoUpdatedImplBase {
   private final Drone drone;
   private static final Logger LOGGER = Logger.getLogger(ClientDrone.class.getName());
 
-
   public InfoUpdatedImpl(Drone drone, List<Drone> list) {
     this.list = list;
     this.drone = drone;
@@ -31,7 +30,6 @@ public class InfoUpdatedImpl extends InfoUpdatedImplBase {
         .setPoint(new Point(request.getX(), request.getY()));
 
     responseObserver.onNext(Empty.newBuilder().build());
-
     responseObserver.onCompleted();
   }
 

@@ -1,13 +1,12 @@
 package process;
 
 import beans.Drone;
-import com.example.grpc.DroneDeliveryGrpc;
+import com.example.grpc.*;
+import com.example.grpc.CheckDroneGrpc;
+import com.example.grpc.CheckDroneGrpc.CheckDroneStub;
 import com.example.grpc.DroneDeliveryGrpc.*;
-import com.example.grpc.DroneMasterGrpc;
 import com.example.grpc.DroneMasterGrpc.*;
-import com.example.grpc.DronePresentationGrpc;
 import com.example.grpc.DronePresentationGrpc.*;
-import com.example.grpc.Hello;
 import com.example.grpc.Hello.*;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -71,7 +70,7 @@ public class ClientDrone {
         droneClient.asynchronousDronePresentation(drone, list);
       }
 
-      ExitThread exit = new ExitThread();
+      ExitThread exit = new ExitThread(drone, list);
       exit.start();
       synchronized (exit) {
         try {
@@ -95,6 +94,7 @@ public class ClientDrone {
             .addService(new DronePresentationImpl(drone, list))
             .addService(new DroneDeliveryImpl(drone, list))
             .addService(new InfoUpdatedImpl(drone, list))
+            .addService(new DroneCheckImpl())
             .build();
     service.start();
   }
@@ -241,22 +241,17 @@ public class ClientDrone {
             public void messageArrived(String topic, MqttMessage message)
                 throws InterruptedException {
               String receivedMessage = new String(message.getPayload());
-              LOGGER.info("\tMessage: " + receivedMessage + "\n");
+              LOGGER.info("\tORDER: " + receivedMessage + "\n");
 
               Gson gson = new GsonBuilder().create();
               Delivery delivery = gson.fromJson(receivedMessage, Delivery.class);
               int idDriver = defineDroneOfDelivery(list, delivery.getStart()).getId();
               list.get(list.indexOf(searchDroneInList(idDriver, list))).setAvailable(false);
 
-              LOGGER.info("\nlista non aggiornata\n");
-              for (Drone d: list) {
-                LOGGER.info(d.toString());
-              }
-
               asynchronousDelivery(delivery, idDriver, list);
 
               LOGGER.info("\nlista aggiornata\n");
-              for (Drone d: list) {
+              for (Drone d : list) {
                 LOGGER.info(d.toString());
               }
             }
@@ -277,39 +272,102 @@ public class ClientDrone {
 
   private void asynchronousDelivery(Delivery delivery, int driver, List<Drone> list)
       throws InterruptedException {
+    checkDroneLife(drone, list);
+
     Drone next = getNextDrone(drone, list);
 
-    final ManagedChannel channel =
-        ManagedChannelBuilder.forTarget(next.getAddress() + ":" + next.getPort())
-            .usePlaintext()
-            .build();
+    Context.current()
+        .fork()
+        .run(
+            () -> {
+              try {
+                final ManagedChannel channel =
+                    ManagedChannelBuilder.forTarget(next.getAddress() + ":" + next.getPort())
+                        .usePlaintext()
+                        .build();
 
-    DroneDeliveryStub stub = DroneDeliveryGrpc.newStub(channel);
+                DroneDeliveryStub stub = DroneDeliveryGrpc.newStub(channel);
 
-    Hello.Delivery request =
-        Hello.Delivery.newBuilder()
-            .setId(delivery.getId())
-            .setStartX((int) delivery.getStart().getX())
-            .setStartY((int) delivery.getStart().getY())
-            .setEndX((int) delivery.getEnd().getX())
-            .setEndY((int) delivery.getEnd().getY())
-            .setIdDriver(driver)
-            .build();
+                Hello.Delivery request =
+                    Hello.Delivery.newBuilder()
+                        .setId(delivery.getId())
+                        .setStartX((int) delivery.getStart().getX())
+                        .setStartY((int) delivery.getStart().getY())
+                        .setEndX((int) delivery.getEnd().getX())
+                        .setEndY((int) delivery.getEnd().getY())
+                        .setIdDriver(driver)
+                        .build();
 
-    stub.delivery(
-        request,
-        new StreamObserver<Empty>() {
-          public void onNext(Empty response) {}
+                stub.delivery(
+                    request,
+                    new StreamObserver<Empty>() {
+                      public void onNext(Empty response) {}
 
-          public void onError(Throwable throwable) {
-            System.out.println("Error! " + throwable.getMessage());
-          }
+                      public void onError(Throwable throwable) {
+                        try {
+                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                        } catch (InterruptedException e) {
+                          channel.shutdownNow();
+                        }
+                      }
 
-          public void onCompleted() {
-            channel.shutdownNow();
-          }
-        });
-    channel.awaitTermination(1, TimeUnit.MINUTES);
+                      public void onCompleted() {
+                        channel.shutdown();
+                      }
+                    });
+                channel.awaitTermination(1, TimeUnit.MINUTES);
+              } catch (Exception e) {
+                e.printStackTrace();
+              }
+            });
+  }
+
+  private void checkDroneLife(Drone drone, List<Drone> list) throws InterruptedException {
+    Drone next = getNextDrone(drone, list);
+
+    Context.current()
+        .fork()
+        .run(
+            () -> {
+              try {
+
+                final ManagedChannel channel =
+                    ManagedChannelBuilder.forTarget(next.getAddress() + ":" + next.getPort())
+                        .usePlaintext()
+                        .build();
+
+                CheckDroneStub stub = CheckDroneGrpc.newStub(channel);
+
+                Empty request = Empty.newBuilder().build();
+
+                stub.check(
+                    request,
+                    new StreamObserver<Empty>() {
+                      @Override
+                      public void onNext(Empty value) {}
+
+                      @Override
+                      public void onError(Throwable t) {
+                        LOGGER.info("\nil prossimo drone è down...\n");
+                        Drone drone = getNextDrone(next, list);
+                        list.remove(next);
+                        channel.shutdown();
+                        try {
+                          checkDroneLife(drone, list);
+                        } catch (InterruptedException e) {
+                          e.printStackTrace();
+                        }
+                      }
+
+                      @Override
+                      public void onCompleted() {
+                        channel.shutdown();
+                      }
+                    });
+              } catch (Exception e) {
+                e.printStackTrace();
+              }
+            });
   }
 
   private Drone defineDroneOfDelivery(List<Drone> list, Point point) {

@@ -33,6 +33,10 @@ message DroneInfo {
   double km = 6;
 }
 
+service CheckDrone {
+  rpc check(Empty) returns (Empty);
+}
+
 service InfoUpdated {
   rpc message(DroneInfo) returns (Empty);
 }

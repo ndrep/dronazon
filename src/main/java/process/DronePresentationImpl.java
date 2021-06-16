@@ -4,6 +4,7 @@ import beans.Drone;
 import com.example.grpc.DronePresentationGrpc.*;
 import com.example.grpc.Hello;
 import com.example.grpc.Hello.*;
+import com.example.grpc.Hello.Empty;
 import io.grpc.stub.StreamObserver;
 import java.awt.*;
 import java.util.Comparator;
@@ -21,16 +22,18 @@ public class DronePresentationImpl extends DronePresentationImplBase {
 
   @Override
   public void info(Hello.Drone request, StreamObserver<Empty> responseObserver) {
-    Drone inDrone = new Drone(request.getId(), request.getPort(), request.getAddress());
+    try {
+      Drone inDrone = new Drone(request.getId(), request.getPort(), request.getAddress());
 
-    if (isMasterDrone()) inDrone.setPoint(new Point(request.getX(), request.getY()));
+      if (isMasterDrone()) inDrone.setPoint(new Point(request.getX(), request.getY()));
 
-    list.add(inDrone);
+      list.add(inDrone);
 
-    list.sort(Comparator.comparing(Drone::getId));
-
-    responseObserver.onNext(Hello.Empty.newBuilder().build());
-
+      list.sort(Comparator.comparing(Drone::getId));
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+    responseObserver.onNext(Empty.newBuilder().build());
     responseObserver.onCompleted();
   }
 

@@ -18,9 +18,7 @@ public class DroneMasterImpl extends DroneMasterImplBase {
   @Override
   public void master(Empty request, StreamObserver<Response> responseObserver) {
     Response response = Response.newBuilder().setId(drone.getIdMaster()).build();
-
     responseObserver.onNext(response);
-
     responseObserver.onCompleted();
   }
 }
