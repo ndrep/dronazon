@@ -17,8 +17,16 @@ public class DroneMasterImpl extends DroneMasterImplBase {
 
   @Override
   public void master(Empty request, StreamObserver<Response> responseObserver) {
-    Response response = Response.newBuilder().setId(drone.getIdMaster()).build();
+    Response response = Response.newBuilder().setId(findDrone(drone, list).getIdMaster()).build();
     responseObserver.onNext(response);
     responseObserver.onCompleted();
+  }
+
+  private Drone findDrone(Drone drone, List<Drone> list) {
+    return list.stream().filter(d -> isMaster(d.getId(), drone.getId())).findFirst().orElse(null);
+  }
+
+  private boolean isMaster(int idMaster, int id) {
+    return idMaster == id;
   }
 }

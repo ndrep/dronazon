@@ -31,6 +31,7 @@ message DroneInfo {
   int32 y = 4;
   string timestamp = 5;
   double km = 6;
+  int32 tot_delivery = 7;
 }
 
 service CheckDrone {

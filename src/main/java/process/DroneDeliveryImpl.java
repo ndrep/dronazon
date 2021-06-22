@@ -14,12 +14,10 @@ import java.awt.*;
 import java.sql.Timestamp;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
 
 public class DroneDeliveryImpl extends DroneDeliveryImplBase {
   private final Drone drone;
   private final List<Drone> list;
-  private static final Logger LOGGER = Logger.getLogger(ClientDrone.class.getName());
 
   public DroneDeliveryImpl(Drone drone, List<Drone> list) {
     this.drone = drone;
@@ -84,19 +82,24 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
   }
 
   private void makeDelivery(Delivery request) throws InterruptedException {
-    Drone master =
-        list.stream()
-            .filter(d -> isDriver(d.getId(), drone.getIdMaster()))
-            .findFirst()
-            .orElse(null);
+    int IdMaster = list.stream().filter(d -> d.getId() == drone.getId()).findFirst().orElse(null).getIdMaster();
+    Drone master = list.stream().filter(d -> d.getId() == IdMaster).findFirst().orElse(null);
 
     Drone updated = list.get(list.indexOf(searchDroneById(request.getIdDriver())));
-    updated.setBattery(updated.getBattery() - 10);
 
-    LOGGER.info("\nsto consegnando...\n");
     Thread.sleep(10000);
+    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
 
     assert master != null;
+
+    updated.setBattery(updated.getBattery() - 10);
+    updated.setTot_delivery(updated.getTot_delivery() + 1);
+    updated.setTimestamp(timestamp.toString());
+    Point start = new Point(request.getStartX(), request.getStartY());
+    Point end = new Point(request.getEndX(), request.getEndY());
+    double distance = updated.getPoint().distance(start) + start.distance(end);
+    updated.setTot_km(updated.getTot_km() + distance);
+    updated.setPoint(end);
 
     final ManagedChannel channel =
         ManagedChannelBuilder.forTarget(master.getAddress() + ":" + master.getPort())
@@ -105,19 +108,15 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
 
     InfoUpdatedStub stub = InfoUpdatedGrpc.newStub(channel);
 
-    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
-    Point start = new Point(request.getStartX(), request.getStartY());
-    Point end = new Point(request.getEndX(), request.getEndY());
-    double distance = updated.getPoint().distance(start) + start.distance(end);
-
     DroneInfo info =
         DroneInfo.newBuilder()
             .setId(drone.getId())
             .setTimestamp(timestamp.toString())
-            .setKm(distance)
+            .setKm(updated.getTot_km())
             .setBattery(updated.getBattery())
             .setX(request.getEndX())
             .setY(request.getEndY())
+                .setTotDelivery(updated.getTot_delivery())
             .build();
 
     stub.message(

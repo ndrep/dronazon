@@ -3,7 +3,6 @@ package process;
 import beans.Drone;
 import com.example.grpc.DronePresentationGrpc.*;
 import com.example.grpc.Hello;
-import com.example.grpc.Hello.*;
 import com.example.grpc.Hello.Empty;
 import io.grpc.stub.StreamObserver;
 import java.awt.*;

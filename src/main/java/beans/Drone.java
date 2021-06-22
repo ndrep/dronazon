@@ -16,6 +16,9 @@ public class Drone {
   @JsonIgnore private boolean available = true;
   @JsonIgnore private Point point;
   @JsonIgnore private int idMaster;
+  @JsonIgnore private int tot_delivery;
+  @JsonIgnore private double tot_km;
+  @JsonIgnore private String timestamp = null;
 
   public Drone() {}
 
@@ -53,7 +56,7 @@ public class Drone {
     return battery;
   }
 
-  public void setBattery(int battery) {
+  public synchronized void setBattery(int battery) {
     this.battery = battery;
   }
 
@@ -61,7 +64,7 @@ public class Drone {
     return point;
   }
 
-  public void setPoint(Point point) {
+  public synchronized void setPoint(Point point) {
     this.point = point;
   }
 
@@ -69,32 +72,45 @@ public class Drone {
     return available;
   }
 
+  public synchronized void setAvailable(boolean available) {
+    this.available = available;
+  }
+
   public int getIdMaster() {
     return idMaster;
   }
 
-  public void setIdMaster(int idMaster) {
+  public synchronized void setIdMaster(int idMaster) {
     this.idMaster = idMaster;
   }
 
-  public void setAvailable(boolean available) {
-    this.available = available;
+  public int getTot_delivery() {
+    return tot_delivery;
+  }
+
+  public synchronized void setTot_delivery(int tot_delivery) {
+    this.tot_delivery = tot_delivery;
+  }
+
+  public double getTot_km() {
+    return tot_km;
+  }
+
+  public synchronized void setTot_km(double tot_km) {
+    this.tot_km = tot_km;
+  }
+
+  public String getTimestamp() {
+    return timestamp;
+  }
+
+  public synchronized void setTimestamp(String timestamp) {
+    this.timestamp = timestamp;
   }
 
   @Override
   public String toString() {
-    return "Drone{"
-        + "id="
-        + id
-        + ", port="
-        + port
-        + ", address='"
-        + address
-        + '\''
-        + ", battery="
-        + battery
-        + ", point="
-        + point
-        + '}';
+    return "id="
+        + id + " ";
   }
 }
