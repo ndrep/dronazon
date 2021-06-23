@@ -23,10 +23,6 @@ public class DroneMasterImpl extends DroneMasterImplBase {
   }
 
   private Drone findDrone(Drone drone, List<Drone> list) {
-    return list.stream().filter(d -> isMaster(d.getId(), drone.getId())).findFirst().orElse(null);
-  }
-
-  private boolean isMaster(int idMaster, int id) {
-    return idMaster == id;
+    return list.stream().filter(d -> d.getId() == drone.getId()).findFirst().orElse(null);
   }
 }

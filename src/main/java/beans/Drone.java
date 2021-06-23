@@ -18,7 +18,7 @@ public class Drone {
   @JsonIgnore private int idMaster;
   @JsonIgnore private int tot_delivery;
   @JsonIgnore private double tot_km;
-  @JsonIgnore private String timestamp = null;
+  @JsonIgnore private String timestamp = "no delivery made";
 
   public Drone() {}
 
@@ -110,6 +110,9 @@ public class Drone {
 
   @Override
   public String toString() {
-    return " id=" + id;
+    return " id=" + id + " ";
   }
+
+  public String printPoint() { return "("+ point.x+","+point.y+")"; }
+
 }
