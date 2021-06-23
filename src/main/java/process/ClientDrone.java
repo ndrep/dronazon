@@ -63,10 +63,12 @@ public class ClientDrone {
     if (list.size() == 1) {
       drone.setIdMaster(drone.getId());
       droneClient.findDrone(drone, list).setIdMaster(drone.getId());
+    } else {
+      droneClient.findDrone(drone, list).setBattery(30);
     }
 
     try {
-      startAllGrpcServices(drone, list);
+      droneClient.startAllGrpcServices(drone, list, client);
 
       if (droneClient.isMaster(drone.getIdMaster(), drone.getId())) {
         droneClient.subscribe(drone, list);
@@ -138,12 +140,13 @@ public class ClientDrone {
     print.start();
   }
 
-  private static void startAllGrpcServices(Drone drone, List<Drone> list) throws IOException {
+  private void startAllGrpcServices(Drone drone, List<Drone> list, Client client)
+      throws IOException {
     Server service =
         ServerBuilder.forPort(drone.getPort())
             .addService(new DroneMasterImpl(drone, list))
             .addService(new DronePresentationImpl(drone, list))
-            .addService(new DroneDeliveryImpl(drone, list))
+            .addService(new DroneDeliveryImpl(drone, list, client))
             .addService(new InfoUpdatedImpl(drone, list))
             .addService(new DroneCheckImpl())
             .build();
@@ -249,11 +252,15 @@ public class ClientDrone {
             public void onNext(Empty response) {}
 
             public void onError(Throwable throwable) {
-              System.out.println("Error! " + throwable.getMessage());
+              try {
+                channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+              } catch (InterruptedException e) {
+                channel.shutdownNow();
+              }
             }
 
             public void onCompleted() {
-              channel.shutdownNow();
+              channel.shutdown();
             }
           });
       channel.awaitTermination(1, TimeUnit.MINUTES);
@@ -395,11 +402,11 @@ public class ClientDrone {
                       public void onError(Throwable t) {
                         Drone drone = getNextDrone(next, list);
                         list.remove(next);
-                        channel.shutdown();
                         try {
+                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
                           checkDroneLife(drone, list);
                         } catch (InterruptedException e) {
-                          e.printStackTrace();
+                          channel.shutdownNow();
                         }
                       }
 

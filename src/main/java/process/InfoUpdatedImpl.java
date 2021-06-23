@@ -18,24 +18,27 @@ public class InfoUpdatedImpl extends InfoUpdatedImplBase {
 
   @Override
   public void message(DroneInfo request, StreamObserver<Empty> responseObserver) {
-
     updateDroneInfoInList(request);
-
     responseObserver.onNext(Empty.newBuilder().build());
     responseObserver.onCompleted();
   }
 
   private void updateDroneInfoInList(DroneInfo request) {
-    list.get(list.indexOf(searchDroneInList(request.getId(), list))).setAvailable(true);
-    list.get(list.indexOf(searchDroneInList(request.getId(), list)))
-        .setBattery(request.getBattery());
-    list.get(list.indexOf(searchDroneInList(request.getId(), list)))
-        .setPoint(new Point(request.getX(), request.getY()));
-    list.get(list.indexOf(searchDroneInList(request.getId(), list))).setTot_km(request.getKm());
-    list.get(list.indexOf(searchDroneInList(request.getId(), list)))
-        .setTot_delivery(request.getTotDelivery());
-    list.get(list.indexOf(searchDroneInList(request.getId(), list)))
-        .setTimestamp(request.getTimestamp());
+    Drone updated = getDrone(request);
+    if (updated.getBattery() < 15) {
+      list.remove(updated);
+    } else {
+      updated.setAvailable(true);
+      updated.setBattery(request.getBattery());
+      updated.setPoint(new Point(request.getX(), request.getY()));
+      updated.setTot_km(request.getKm());
+      updated.setTot_delivery(request.getTotDelivery());
+      updated.setTimestamp(request.getTimestamp());
+    }
+  }
+
+  private Drone getDrone(DroneInfo request) {
+    return list.get(list.indexOf(searchDroneInList(request.getId(), list)));
   }
 
   private Drone searchDroneInList(int id, List<Drone> list) {

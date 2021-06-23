@@ -6,6 +6,9 @@ import com.example.grpc.DroneDeliveryGrpc.*;
 import com.example.grpc.Hello.*;
 import com.example.grpc.InfoUpdatedGrpc;
 import com.example.grpc.InfoUpdatedGrpc.*;
+import com.sun.jersey.api.client.Client;
+import com.sun.jersey.api.client.ClientResponse;
+import com.sun.jersey.api.client.WebResource;
 import io.grpc.Context;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -18,10 +21,12 @@ import java.util.concurrent.TimeUnit;
 public class DroneDeliveryImpl extends DroneDeliveryImplBase {
   private final Drone drone;
   private final List<Drone> list;
+  private final Client client;
 
-  public DroneDeliveryImpl(Drone drone, List<Drone> list) {
+  public DroneDeliveryImpl(Drone drone, List<Drone> list, Client client) {
     this.drone = drone;
     this.list = list;
+    this.client = client;
   }
 
   @Override
@@ -88,6 +93,7 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
             .findFirst()
             .orElse(null)
             .getIdMaster();
+
     Drone master = list.stream().filter(d -> d.getId() == IdMaster).findFirst().orElse(null);
 
     Drone updated = list.get(list.indexOf(searchDroneById(request.getIdDriver())));
@@ -107,7 +113,7 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
 
     DroneInfo info =
         DroneInfo.newBuilder()
-            .setId(drone.getId())
+            .setId(updated.getId())
             .setTimestamp(timestamp.toString())
             .setKm(updated.getTot_km())
             .setBattery(updated.getBattery())
@@ -133,21 +139,18 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
 
           @Override
           public void onCompleted() {
+            String url = "http://localhost:6789";
+            if (updated.getBattery() < 15 && updated.getId() != updated.getIdMaster()) {
+              WebResource webResource = client.resource(url + "/api/remove");
+              ClientResponse response =
+                  webResource.type("application/json").post(ClientResponse.class, drone.getId());
 
-            /*
-            if(updated.getBattery() < 15){
-                Client client = Client.create();
-                String url = "http://localhost:6789";
-                WebResource webResource = client.resource(url + "/api/remove");
-                ClientResponse response =
-                        webResource.type("application/json").post(ClientResponse.class, drone);
-
-                if (response.getStatus() != 200) {
-                    throw new RuntimeException("Failed : HTTP error code : " + response.getStatus());
-                }
+              if (response.getStatus() != 200) {
+                throw new RuntimeException("Failed : HTTP error code : " + response.getStatus());
+              }
+              channel.shutdownNow();
+              System.exit(0);
             }
-
-             */
             channel.shutdownNow();
           }
         });
