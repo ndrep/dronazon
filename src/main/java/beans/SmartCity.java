@@ -37,4 +37,14 @@ public class SmartCity {
     list.add(drone);
     return list;
   }
+
+  public synchronized ArrayList<Drone> remove(int id) {
+    for (Drone d : list) {
+      if (d.getId() == id) {
+        list.remove(d);
+        break;
+      }
+    }
+    return list;
+  }
 }

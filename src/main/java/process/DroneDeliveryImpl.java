@@ -67,11 +67,11 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
 
           @Override
           public void onError(Throwable t) {
-              try {
-                  channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-              } catch (InterruptedException e) {
-                  channel.shutdownNow();
-              }
+            try {
+              channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+              channel.shutdownNow();
+            }
           }
 
           @Override
@@ -82,24 +82,21 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
   }
 
   private void makeDelivery(Delivery request) throws InterruptedException {
-    int IdMaster = list.stream().filter(d -> d.getId() == drone.getId()).findFirst().orElse(null).getIdMaster();
+    int IdMaster =
+        list.stream()
+            .filter(d -> d.getId() == drone.getId())
+            .findFirst()
+            .orElse(null)
+            .getIdMaster();
     Drone master = list.stream().filter(d -> d.getId() == IdMaster).findFirst().orElse(null);
 
     Drone updated = list.get(list.indexOf(searchDroneById(request.getIdDriver())));
 
     Thread.sleep(10000);
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+    updateDroneInfo(request, updated, timestamp);
 
     assert master != null;
-
-    updated.setBattery(updated.getBattery() - 10);
-    updated.setTot_delivery(updated.getTot_delivery() + 1);
-    updated.setTimestamp(timestamp.toString());
-    Point start = new Point(request.getStartX(), request.getStartY());
-    Point end = new Point(request.getEndX(), request.getEndY());
-    double distance = updated.getPoint().distance(start) + start.distance(end);
-    updated.setTot_km(updated.getTot_km() + distance);
-    updated.setPoint(end);
 
     final ManagedChannel channel =
         ManagedChannelBuilder.forTarget(master.getAddress() + ":" + master.getPort())
@@ -116,7 +113,7 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
             .setBattery(updated.getBattery())
             .setX(request.getEndX())
             .setY(request.getEndY())
-                .setTotDelivery(updated.getTot_delivery())
+            .setTotDelivery(updated.getTot_delivery())
             .build();
 
     stub.message(
@@ -127,18 +124,44 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
 
           @Override
           public void onError(Throwable t) {
-              try {
-                  channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-              } catch (InterruptedException e) {
-                  channel.shutdownNow();
-              }
+            try {
+              channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+              channel.shutdownNow();
+            }
           }
 
           @Override
           public void onCompleted() {
+
+            /*
+            if(updated.getBattery() < 15){
+                Client client = Client.create();
+                String url = "http://localhost:6789";
+                WebResource webResource = client.resource(url + "/api/remove");
+                ClientResponse response =
+                        webResource.type("application/json").post(ClientResponse.class, drone);
+
+                if (response.getStatus() != 200) {
+                    throw new RuntimeException("Failed : HTTP error code : " + response.getStatus());
+                }
+            }
+
+             */
             channel.shutdownNow();
           }
         });
+  }
+
+  private void updateDroneInfo(Delivery request, Drone updated, Timestamp timestamp) {
+    updated.setBattery(updated.getBattery() - 10);
+    updated.setTot_delivery(updated.getTot_delivery() + 1);
+    updated.setTimestamp(timestamp.toString());
+    Point start = new Point(request.getStartX(), request.getStartY());
+    Point end = new Point(request.getEndX(), request.getEndY());
+    double distance = updated.getPoint().distance(start) + start.distance(end);
+    updated.setTot_km(updated.getTot_km() + distance);
+    updated.setPoint(end);
   }
 
   private Drone searchDroneById(int id) {

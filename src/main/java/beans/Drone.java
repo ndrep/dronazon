@@ -56,7 +56,7 @@ public class Drone {
     return battery;
   }
 
-  public synchronized void setBattery(int battery) {
+  public void setBattery(int battery) {
     this.battery = battery;
   }
 
@@ -64,7 +64,7 @@ public class Drone {
     return point;
   }
 
-  public synchronized void setPoint(Point point) {
+  public void setPoint(Point point) {
     this.point = point;
   }
 
@@ -72,23 +72,23 @@ public class Drone {
     return available;
   }
 
-  public synchronized void setAvailable(boolean available) {
-    this.available = available;
-  }
-
   public int getIdMaster() {
     return idMaster;
   }
 
-  public synchronized void setIdMaster(int idMaster) {
+  public void setIdMaster(int idMaster) {
     this.idMaster = idMaster;
+  }
+
+  public void setAvailable(boolean available) {
+    this.available = available;
   }
 
   public int getTot_delivery() {
     return tot_delivery;
   }
 
-  public synchronized void setTot_delivery(int tot_delivery) {
+  public void setTot_delivery(int tot_delivery) {
     this.tot_delivery = tot_delivery;
   }
 
@@ -96,7 +96,7 @@ public class Drone {
     return tot_km;
   }
 
-  public synchronized void setTot_km(double tot_km) {
+  public void setTot_km(double tot_km) {
     this.tot_km = tot_km;
   }
 
@@ -104,13 +104,12 @@ public class Drone {
     return timestamp;
   }
 
-  public synchronized void setTimestamp(String timestamp) {
+  public void setTimestamp(String timestamp) {
     this.timestamp = timestamp;
   }
 
   @Override
   public String toString() {
-    return "id="
-        + id + " ";
+    return " id=" + id;
   }
 }

@@ -62,4 +62,12 @@ public class ServerAdminService {
     GenericEntity<List<Drone>> entity = new GenericEntity<List<Drone>>(list) {};
     return Response.status(200).entity(entity).build();
   }
+
+  @Path("remove")
+  @POST
+  @Consumes({"application/json"})
+  public Response removeDrone(int id) {
+    SmartCity.getInstance().remove(id);
+    return Response.status(200).build();
+  }
 }

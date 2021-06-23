@@ -32,8 +32,10 @@ public class InfoUpdatedImpl extends InfoUpdatedImplBase {
     list.get(list.indexOf(searchDroneInList(request.getId(), list)))
         .setPoint(new Point(request.getX(), request.getY()));
     list.get(list.indexOf(searchDroneInList(request.getId(), list))).setTot_km(request.getKm());
-    list.get(list.indexOf(searchDroneInList(request.getId(), list))).setTot_delivery(request.getTotDelivery());
-    list.get(list.indexOf(searchDroneInList(request.getId(), list))).setTimestamp(request.getTimestamp());
+    list.get(list.indexOf(searchDroneInList(request.getId(), list)))
+        .setTot_delivery(request.getTotDelivery());
+    list.get(list.indexOf(searchDroneInList(request.getId(), list)))
+        .setTimestamp(request.getTimestamp());
   }
 
   private Drone searchDroneInList(int id, List<Drone> list) {
