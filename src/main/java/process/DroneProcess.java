@@ -64,13 +64,34 @@ public class DroneProcess {
 
     if (list.size() == 1) {
       dlist.setIdMaster(drone.getId());
+      dlist.setBattery(100000);
       drone.setIdMaster(drone.getId());
     }
+
+    Queue buffer = new Queue();
 
     try {
       dp.startAllGrpcServices(drone, list, client);
       if (dp.isMaster(drone.getIdMaster(), drone.getId())) {
-        dp.startDelivery(list);
+
+        dp.startDelivery(list, buffer);
+
+        new Thread(() -> {
+
+            while (true) {
+                Delivery delivery = buffer.pop(list);
+                Drone driver = defineDroneOfDelivery(list, delivery.getStart());
+
+                try {
+                    dp.sendDelivery(delivery, driver.getId(), list);
+                    driver.setAvailable(false);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+
+        }).start();
+
       } else {
         dp.searchMasterInList(drone, list);
         dp.greeting(drone, list);
@@ -113,25 +134,11 @@ public class DroneProcess {
             () -> {
               while (true) {
                 try {
+
                   checkDroneLife(drone, list);
-
-                  StringBuilder builder = new StringBuilder();
-                  Drone d = searchDroneInList(drone, list);
-                  builder.append("ID: ").append(d.getId()).append("\n");
-                  builder.append("MASTER: ").append(d.getIdMaster()).append("\n");
-                  builder.append("KM: ").append(d.getTot_km()).append("\n");
-                  builder.append("DELIVERY: ").append(d.getTot_delivery()).append("\n");
-                  builder.append("TIMESTAMP: ").append(d.getTimestamp()).append("\n");
-                  builder.append("BATTERY: ").append(d.getBattery()).append("\n");
-                  builder.append("POSITION: ").append(d.printPoint()).append("\n");
-                  builder.append("LIST: ").append("[");
-                  for (Drone t : list) {
-                    builder.append(t.toString());
-                  }
-                  builder.append("]");
-                  LOGGER.info("\n" + builder + "\n");
-
                   Thread.sleep(10000);
+                  buildMessage(drone, list);
+
                 } catch (InterruptedException e) {
                   e.printStackTrace();
                 }
@@ -141,7 +148,25 @@ public class DroneProcess {
     print.start();
   }
 
-  private void startAllGrpcServices(Drone drone, List<Drone> list, Client client)
+    private void buildMessage(Drone drone, List<Drone> list) {
+        StringBuilder builder = new StringBuilder();
+        Drone d = searchDroneInList(drone, list);
+        builder.append("ID: ").append(d.getId()).append("\n");
+        builder.append("MASTER: ").append(d.getIdMaster()).append("\n");
+        builder.append("KM: ").append(d.getTot_km()).append("\n");
+        builder.append("DELIVERY: ").append(d.getTot_delivery()).append("\n");
+        builder.append("TIMESTAMP: ").append(d.getTimestamp()).append("\n");
+        builder.append("BATTERY: ").append(d.getBattery()).append("\n");
+        builder.append("POSITION: ").append(d.printPoint()).append("\n");
+        builder.append("LIST: ").append("[");
+        for (Drone t : list) {
+          builder.append(t.toString());
+        }
+        builder.append("]");
+        LOGGER.info("\n" + builder + "\n");
+    }
+
+    private void startAllGrpcServices(Drone drone, List<Drone> list, Client client)
       throws IOException {
     Server service =
         ServerBuilder.forPort(drone.getPort())
@@ -278,7 +303,7 @@ public class DroneProcess {
     return clientConfig;
   }
 
-  private void startDelivery(List<Drone> list) {
+  private void startDelivery(List<Drone> list, Queue buffer) {
     try {
       String broker = "tcp://localhost:1883";
       String clientId = MqttClient.generateClientId();
@@ -286,26 +311,17 @@ public class DroneProcess {
       int qos = 0;
       MqttClient client = configClientMQTT(broker, clientId);
 
-        client.setCallback(
+      client.setCallback(
           new MqttCallback() {
 
-            public void messageArrived(String topic, MqttMessage message)
-                throws InterruptedException {
-              String receivedMessage = new String(message.getPayload());
+            public void messageArrived(String topic, MqttMessage message) throws InterruptedException {
+                String receivedMessage = new String(message.getPayload());
+                Gson gson = new GsonBuilder().create();
 
-              Gson gson = new GsonBuilder().create();
-              Delivery delivery = gson.fromJson(receivedMessage, Delivery.class);
-              Drone driver = defineDroneOfDelivery(list, delivery.getStart());
+                Delivery delivery = gson.fromJson(receivedMessage, Delivery.class);
 
-              if (driver != null) {
-
-                int idDriver = driver.getId();
-                list.get(list.indexOf(searchDroneInList(idDriver, list))).setAvailable(false);
-
-                sendDelivery(delivery, idDriver, list);
-              }
+                buffer.push(delivery, list);
             }
-
             public void connectionLost(Throwable cause) {
               cause.printStackTrace();
             }
@@ -320,15 +336,15 @@ public class DroneProcess {
     }
   }
 
-    private MqttClient configClientMQTT(String broker, String clientId) throws MqttException {
-        MqttClient client = new MqttClient(broker, clientId);
-        MqttConnectOptions connOpts = new MqttConnectOptions();
-        connOpts.setCleanSession(true);
-        client.connect(connOpts);
-        return client;
-    }
+  private MqttClient configClientMQTT(String broker, String clientId) throws MqttException {
+    MqttClient client = new MqttClient(broker, clientId);
+    MqttConnectOptions connOpts = new MqttConnectOptions();
+    connOpts.setCleanSession(true);
+    client.connect(connOpts);
+    return client;
+  }
 
-    private void sendDelivery(Delivery delivery, int driver, List<Drone> list)
+  private void sendDelivery(Delivery delivery, int driver, List<Drone> list)
       throws InterruptedException {
     checkDroneLife(drone, list);
 
@@ -429,14 +445,14 @@ public class DroneProcess {
             });
   }
 
-  private Drone defineDroneOfDelivery(List<Drone> list, Point point) {
+  private static Drone defineDroneOfDelivery(List<Drone> list, Point start) {
+      for (Drone d: list
+           ) {
+          System.out.println(d.getAvailable());
+      }
     return list.stream()
-        // .filter(Drone::getAvailable)
-        .min(Comparator.comparing(d -> d.getPoint().distance(point)))
+        .filter(Drone::getAvailable)
+        .min(Comparator.comparing(d -> d.getPoint().distance(start)))
         .orElse(null);
-  }
-
-  private Drone searchDroneInList(int id, List<Drone> list) {
-    return list.stream().filter(d -> d.getId() == id).findFirst().orElse(null);
   }
 }

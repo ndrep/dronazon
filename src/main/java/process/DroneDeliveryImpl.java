@@ -99,6 +99,7 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
     Drone updated = list.get(list.indexOf(searchDroneById(request.getIdDriver())));
 
     Thread.sleep(10000);
+
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
     updateDroneInfo(request, updated, timestamp);
 

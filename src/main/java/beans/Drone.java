@@ -113,6 +113,7 @@ public class Drone {
     return " id=" + id + " ";
   }
 
-  public String printPoint() { return "("+ point.x+","+point.y+")"; }
-
+  public String printPoint() {
+    return "(" + point.x + "," + point.y + ")";
+  }
 }
