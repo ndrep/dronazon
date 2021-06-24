@@ -5,8 +5,8 @@ import java.util.Random;
 
 public class Delivery {
   private final int id;
-  private final Point start;
-  private final Point end;
+  private Point start;
+  private Point end;
 
   public Delivery(int id) {
     this.id = id;
@@ -25,5 +25,13 @@ public class Delivery {
 
   public Point getEnd() {
     return end;
+  }
+
+  public void setStart(Point start) {
+    this.start = start;
+  }
+
+  public void setEnd(Point end) {
+    this.end = end;
   }
 }

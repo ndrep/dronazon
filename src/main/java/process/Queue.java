@@ -9,11 +9,9 @@ public class Queue {
 
   public ArrayList<Delivery> buffer = new ArrayList<>();
 
-  public synchronized void push(Delivery delivery, List<Drone> list) {
+  public synchronized void push(Delivery delivery) {
     buffer.add(delivery);
-    if (available(list)) {
-      notify();
-    }
+    notify();
   }
 
   public synchronized Delivery pop(List<Drone> list) {

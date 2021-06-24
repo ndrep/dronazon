@@ -17,16 +17,21 @@ import java.awt.*;
 import java.sql.Timestamp;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
 
 public class DroneDeliveryImpl extends DroneDeliveryImplBase {
   private final Drone drone;
   private final List<Drone> list;
   private final Client client;
+  private final Queue buffer;
+    private static final Logger LOGGER = Logger.getLogger(DroneProcess.class.getSimpleName());
 
-  public DroneDeliveryImpl(Drone drone, List<Drone> list, Client client) {
+
+    public DroneDeliveryImpl(Drone drone, List<Drone> list, Client client, Queue buffer) {
     this.drone = drone;
     this.list = list;
     this.client = client;
+    this.buffer = buffer;
   }
 
   @Override
@@ -38,6 +43,10 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
               try {
                 if (isDriver(request.getIdDriver(), drone.getId())) {
                   makeDelivery(request);
+                } else if (driverIsDead(request)) {
+                  list.remove(searchDroneById(request.getIdDriver()));
+                  dronazon.Delivery delivery = updateDelivery(request);
+                  buffer.push(delivery);
                 } else {
                   forwardDelivery(request);
                 }
@@ -49,11 +58,24 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
             });
   }
 
+    private dronazon.Delivery updateDelivery(Delivery request) {
+        Point start = new Point(request.getStartX(), request.getStartY());
+        Point end = new Point(request.getEndX(), request.getEndY());
+        dronazon.Delivery delivery = new dronazon.Delivery(request.getId());
+        delivery.setStart(start);
+        delivery.setEnd(end);
+        return delivery;
+    }
+
+    private boolean driverIsDead(Delivery request) {
+    return drone.getId() == drone.getIdMaster() && request.getIdDriver() != drone.getIdMaster();
+  }
+
   private boolean isDriver(int idDriver, int id) {
     return idDriver == id;
   }
 
-  private void forwardDelivery(Delivery request) throws InterruptedException {
+  private void forwardDelivery(Delivery request) {
     Drone next = getNextDrone(list);
 
     final ManagedChannel channel =
@@ -98,7 +120,7 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
 
     Drone updated = list.get(list.indexOf(searchDroneById(request.getIdDriver())));
 
-    Thread.sleep(10000);
+    Thread.sleep(5000);
 
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
     updateDroneInfo(request, updated, timestamp);
