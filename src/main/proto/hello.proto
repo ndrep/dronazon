@@ -34,6 +34,11 @@ message DroneInfo {
   int32 tot_delivery = 7;
 }
 
+message Election {
+  int32 id = 1;
+  int32 battery = 2;
+}
+
 service CheckDrone {
   rpc check(Empty) returns (Empty);
 }
@@ -52,4 +57,12 @@ service DronePresentation {
 
 service DroneMaster {
   rpc master(Empty) returns (Response);
+}
+
+service StartElection {
+  rpc start(Election) returns (Empty);
+}
+
+service EndElection {
+  rpc end(Election) returns (Empty);
 }

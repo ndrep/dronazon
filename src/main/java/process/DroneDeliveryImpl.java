@@ -98,7 +98,6 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
           @Override
           public void onError(Throwable t) {
             try {
-              checkDroneLife(drone, list);
               forwardDelivery(request);
               channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
@@ -235,11 +234,10 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
 
                       @Override
                       public void onError(Throwable t) {
-                        Drone drone = findDrone(list);
-                        list.remove(next);
                         try {
-                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                          list.remove(next);
                           checkDroneLife(drone, list);
+                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
                         } catch (InterruptedException e) {
                           channel.shutdownNow();
                         }

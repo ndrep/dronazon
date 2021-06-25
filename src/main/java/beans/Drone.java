@@ -8,7 +8,7 @@ import org.codehaus.jackson.annotate.JsonIgnore;
 
 @XmlRootElement
 @XmlAccessorType(XmlAccessType.FIELD)
-public class Drone {
+public class Drone implements Comparable<Drone> {
   private int id;
   private int port;
   private String address;
@@ -127,5 +127,12 @@ public class Drone {
 
   public String printPoint() {
     return "(" + point.x + "," + point.y + ")";
+  }
+
+  @Override
+  public int compareTo(Drone o) {
+    if (battery > o.getBattery()) return 1;
+    else if (battery == o.getBattery() && id > o.getId()) return 1;
+    else return -1;
   }
 }
