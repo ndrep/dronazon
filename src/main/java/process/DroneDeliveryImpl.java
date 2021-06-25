@@ -1,6 +1,7 @@
 package process;
 
 import beans.Drone;
+import com.example.grpc.CheckDroneGrpc;
 import com.example.grpc.DroneDeliveryGrpc;
 import com.example.grpc.DroneDeliveryGrpc.*;
 import com.example.grpc.Hello.*;
@@ -24,10 +25,9 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
   private final List<Drone> list;
   private final Client client;
   private final Queue buffer;
-    private static final Logger LOGGER = Logger.getLogger(DroneProcess.class.getSimpleName());
+  private static final Logger LOGGER = Logger.getLogger(DroneProcess.class.getSimpleName());
 
-
-    public DroneDeliveryImpl(Drone drone, List<Drone> list, Client client, Queue buffer) {
+  public DroneDeliveryImpl(Drone drone, List<Drone> list, Client client, Queue buffer) {
     this.drone = drone;
     this.list = list;
     this.client = client;
@@ -36,6 +36,7 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
 
   @Override
   public void delivery(Delivery request, StreamObserver<Empty> responseObserver) {
+    drone.setSafe(false);
     Context.current()
         .fork()
         .run(
@@ -44,7 +45,6 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
                 if (isDriver(request.getIdDriver(), drone.getId())) {
                   makeDelivery(request);
                 } else if (driverIsDead(request)) {
-                  list.remove(searchDroneById(request.getIdDriver()));
                   dronazon.Delivery delivery = updateDelivery(request);
                   buffer.push(delivery);
                 } else {
@@ -53,21 +53,22 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
               } catch (Exception e) {
                 e.printStackTrace();
               }
+
               responseObserver.onNext(Empty.newBuilder().build());
               responseObserver.onCompleted();
             });
   }
 
-    private dronazon.Delivery updateDelivery(Delivery request) {
-        Point start = new Point(request.getStartX(), request.getStartY());
-        Point end = new Point(request.getEndX(), request.getEndY());
-        dronazon.Delivery delivery = new dronazon.Delivery(request.getId());
-        delivery.setStart(start);
-        delivery.setEnd(end);
-        return delivery;
-    }
+  private dronazon.Delivery updateDelivery(Delivery request) {
+    Point start = new Point(request.getStartX(), request.getStartY());
+    Point end = new Point(request.getEndX(), request.getEndY());
+    dronazon.Delivery delivery = new dronazon.Delivery(request.getId());
+    delivery.setStart(start);
+    delivery.setEnd(end);
+    return delivery;
+  }
 
-    private boolean driverIsDead(Delivery request) {
+  private boolean driverIsDead(Delivery request) {
     return drone.getId() == drone.getIdMaster() && request.getIdDriver() != drone.getIdMaster();
   }
 
@@ -75,7 +76,9 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
     return idDriver == id;
   }
 
-  private void forwardDelivery(Delivery request) {
+  private void forwardDelivery(Delivery request) throws InterruptedException {
+    checkDroneLife(drone, list);
+
     Drone next = getNextDrone(list);
 
     final ManagedChannel channel =
@@ -95,6 +98,8 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
           @Override
           public void onError(Throwable t) {
             try {
+              checkDroneLife(drone, list);
+              forwardDelivery(request);
               channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
               channel.shutdownNow();
@@ -103,6 +108,7 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
 
           @Override
           public void onCompleted() {
+            drone.setSafe(true);
             channel.shutdownNow();
           }
         });
@@ -201,5 +207,52 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
 
   private Drone findDrone(List<Drone> list) {
     return list.stream().filter(d -> isDriver(d.getId(), drone.getId())).findFirst().orElse(null);
+  }
+
+  private void checkDroneLife(Drone drone, List<Drone> list) throws InterruptedException {
+    Drone next = findDrone(list);
+
+    Context.current()
+        .fork()
+        .run(
+            () -> {
+              try {
+
+                final ManagedChannel channel =
+                    ManagedChannelBuilder.forTarget(next.getAddress() + ":" + next.getPort())
+                        .usePlaintext()
+                        .build();
+
+                CheckDroneGrpc.CheckDroneStub stub = CheckDroneGrpc.newStub(channel);
+
+                Empty request = Empty.newBuilder().build();
+
+                stub.check(
+                    request,
+                    new StreamObserver<Empty>() {
+                      @Override
+                      public void onNext(Empty value) {}
+
+                      @Override
+                      public void onError(Throwable t) {
+                        Drone drone = findDrone(list);
+                        list.remove(next);
+                        try {
+                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                          checkDroneLife(drone, list);
+                        } catch (InterruptedException e) {
+                          channel.shutdownNow();
+                        }
+                      }
+
+                      @Override
+                      public void onCompleted() {
+                        channel.shutdown();
+                      }
+                    });
+              } catch (Exception e) {
+                e.printStackTrace();
+              }
+            });
   }
 }

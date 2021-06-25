@@ -6,10 +6,12 @@ import com.example.grpc.InfoUpdatedGrpc.InfoUpdatedImplBase;
 import io.grpc.stub.StreamObserver;
 import java.awt.*;
 import java.util.List;
+import java.util.logging.Logger;
 
 public class InfoUpdatedImpl extends InfoUpdatedImplBase {
   private final List<Drone> list;
   private final Drone drone;
+  private static final Logger LOGGER = Logger.getLogger(DroneProcess.class.getSimpleName());
 
   public InfoUpdatedImpl(Drone drone, List<Drone> list) {
     this.list = list;

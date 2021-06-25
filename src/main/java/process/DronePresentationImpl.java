@@ -23,11 +23,8 @@ public class DronePresentationImpl extends DronePresentationImplBase {
   public void info(Hello.Drone request, StreamObserver<Empty> responseObserver) {
     try {
       Drone inDrone = new Drone(request.getId(), request.getPort(), request.getAddress());
-
       if (isMasterDrone()) inDrone.setPoint(new Point(request.getX(), request.getY()));
-
       list.add(inDrone);
-
       list.sort(Comparator.comparing(Drone::getId));
     } catch (Exception e) {
       e.printStackTrace();

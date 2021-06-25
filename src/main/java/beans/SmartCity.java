@@ -1,6 +1,5 @@
 package beans;
 
-import java.awt.*;
 import java.util.ArrayList;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
@@ -38,13 +37,12 @@ public class SmartCity {
     return list;
   }
 
-  public synchronized ArrayList<Drone> remove(int id) {
+  public synchronized void remove(int id) {
     for (Drone d : list) {
       if (d.getId() == id) {
         list.remove(d);
         break;
       }
     }
-    return list;
   }
 }

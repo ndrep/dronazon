@@ -73,47 +73,36 @@ public class DroneProcess {
     try {
       dp.startAllGrpcServices(drone, list, client, buffer);
       if (dp.isMaster(drone.getIdMaster(), drone.getId())) {
-
         dp.startDelivery(list, buffer);
-
-        new Thread(
-                () -> {
-                  while (true) {
-                    try {
-                      Delivery delivery = buffer.pop(list);
-                      Drone driver = defineDroneOfDelivery(list, delivery.getStart());
-                      dp.sendDelivery(delivery, driver.getId(), list);
-                      driver.setAvailable(false);
-                      new Thread(() -> {
-                          try {
-                              Thread.sleep(10000);
-                              if (list.contains(driver)) {
-                                  driver.setAvailable(true);
-                              }
-                          } catch (InterruptedException e) {
-                              e.printStackTrace();
-                          }
-                      }).start();
-                    } catch (InterruptedException e) {
-                      e.printStackTrace();
-                    }
-                  }
-                })
-            .start();
-
+        dp.bufferThread(dp, list, buffer);
       } else {
         dp.searchMasterInList(drone, list);
         dp.greeting(drone, list);
       }
-
       dp.printInfo(drone, list);
-
       dp.quit(url, drone, client);
       System.exit(0);
 
     } catch (IOException | InterruptedException e) {
       e.printStackTrace();
     }
+  }
+
+  private void bufferThread(DroneProcess dp, List<Drone> list, Queue buffer) {
+    new Thread(
+            () -> {
+              while (true) {
+                try {
+                  Delivery delivery = buffer.pop(list);
+                  Drone driver = defineDroneOfDelivery(list, delivery.getStart());
+                  driver.setAvailable(false);
+                  dp.sendDelivery(delivery, driver, list);
+                } catch (InterruptedException e) {
+                  e.printStackTrace();
+                }
+              }
+            })
+        .start();
   }
 
   private void quit(String url, Drone drone, Client client) throws InterruptedException {
@@ -131,6 +120,15 @@ public class DroneProcess {
 
               if (response.getStatus() != 200) {
                 throw new RuntimeException("Failed : HTTP error code : " + response.getStatus());
+              }
+              synchronized (drone) {
+                if (!drone.getSafe()) {
+                  try {
+                    drone.wait();
+                  } catch (InterruptedException e) {
+                    e.printStackTrace();
+                  }
+                }
               }
             });
     t.start();
@@ -169,7 +167,7 @@ public class DroneProcess {
     builder.append("POSITION: ").append(d.printPoint()).append("\n");
     builder.append("LIST: ").append("[");
     for (Drone t : list) {
-      builder.append(t.toString());
+      builder.append(t.toString()).append(" ");
     }
     builder.append("]");
     LOGGER.info("\n" + builder + "\n");
@@ -222,6 +220,8 @@ public class DroneProcess {
   }
 
   private void searchMasterInList(Drone drone, List<Drone> list) throws InterruptedException {
+    checkDroneLife(drone, list);
+
     Drone next = nextDrone(drone, list);
 
     final ManagedChannel channel =
@@ -241,12 +241,17 @@ public class DroneProcess {
             searchDroneInList(drone, list).setIdMaster(response.getId());
           }
 
-          public void onError(Throwable throwable) {
-            try {
-              channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-              channel.shutdownNow();
-            }
+          public void onError(Throwable t) {
+            if (t instanceof StatusRuntimeException
+                && ((StatusRuntimeException) t).getStatus().getCode()
+                    == Status.UNAVAILABLE.getCode()) {
+              try {
+                searchMasterInList(drone, list);
+                channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+              } catch (InterruptedException e) {
+                channel.shutdownNow();
+              }
+            } else t.printStackTrace();
           }
 
           public void onCompleted() {
@@ -289,12 +294,16 @@ public class DroneProcess {
           new StreamObserver<Empty>() {
             public void onNext(Empty response) {}
 
-            public void onError(Throwable throwable) {
-              try {
-                channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-              } catch (InterruptedException e) {
-                channel.shutdownNow();
-              }
+            public void onError(Throwable t) {
+              if (t instanceof StatusRuntimeException
+                  && ((StatusRuntimeException) t).getStatus().getCode()
+                      == Status.UNAVAILABLE.getCode()) {
+                try {
+                  channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                  channel.shutdownNow();
+                }
+              } else t.printStackTrace();
             }
 
             public void onCompleted() {
@@ -329,12 +338,6 @@ public class DroneProcess {
 
               Delivery delivery = gson.fromJson(receivedMessage, Delivery.class);
               buffer.push(delivery);
-
-            StringBuilder str = new StringBuilder();
-            for (Drone d : list) {
-                str.append(d.getAvailable()).append(" ");
-            }
-            LOGGER.info(str.toString());
             }
 
             public void connectionLost(Throwable cause) {
@@ -359,9 +362,19 @@ public class DroneProcess {
     return client;
   }
 
-  private void sendDelivery(Delivery delivery, int driver, List<Drone> list)
+  private void sendDelivery(Delivery delivery, Drone driver, List<Drone> list)
       throws InterruptedException {
-    checkDroneLife(drone, list);
+    Thread t =
+        new Thread(
+            () -> {
+              try {
+                checkDroneLife(drone, list);
+              } catch (InterruptedException e) {
+                e.printStackTrace();
+              }
+            });
+    t.start();
+    t.join();
 
     Drone next = nextDrone(drone, list);
 
@@ -386,7 +399,7 @@ public class DroneProcess {
                         .setStartY(start.y)
                         .setEndX(end.x)
                         .setEndY(end.y)
-                        .setIdDriver(driver)
+                        .setIdDriver(driver.getId())
                         .build();
 
                 stub.delivery(
@@ -396,6 +409,7 @@ public class DroneProcess {
 
                       public void onError(Throwable throwable) {
                         try {
+                          sendDelivery(delivery, driver, list);
                           channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
                         } catch (InterruptedException e) {
                           channel.shutdownNow();
@@ -460,7 +474,7 @@ public class DroneProcess {
             });
   }
 
-  private static Drone defineDroneOfDelivery(List<Drone> list, Point start) {
+  private Drone defineDroneOfDelivery(List<Drone> list, Point start) {
     return list.stream()
         .filter(Drone::getAvailable)
         .min(Comparator.comparing(d -> d.getPoint().distance(start)))

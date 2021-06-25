@@ -19,6 +19,7 @@ public class Drone {
   @JsonIgnore private int tot_delivery;
   @JsonIgnore private double tot_km;
   @JsonIgnore private String timestamp = "no delivery made";
+  @JsonIgnore private volatile boolean safe = true;
 
   public Drone() {}
 
@@ -106,6 +107,17 @@ public class Drone {
 
   public void setTimestamp(String timestamp) {
     this.timestamp = timestamp;
+  }
+
+  public boolean getSafe() {
+    return safe;
+  }
+
+  public synchronized void setSafe(boolean safe) {
+    this.safe = safe;
+    if (safe) {
+      notify();
+    }
   }
 
   @Override
