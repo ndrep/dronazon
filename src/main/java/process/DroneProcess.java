@@ -208,6 +208,7 @@ public class DroneProcess {
         webResource.type("application/json").post(ClientResponse.class, drone);
 
     if (response.getStatus() != 200) {
+        System.exit(0);
       throw new RuntimeException("Failed : HTTP error code : " + response.getStatus());
     }
 
