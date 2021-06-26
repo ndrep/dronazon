@@ -4,7 +4,10 @@ import java.awt.*;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlRootElement;
+
+import dronazon.Delivery;
 import org.codehaus.jackson.annotate.JsonIgnore;
+import process.Queue;
 
 @XmlRootElement
 @XmlAccessorType(XmlAccessType.FIELD)
@@ -20,6 +23,7 @@ public class Drone implements Comparable<Drone> {
   @JsonIgnore private double tot_km;
   @JsonIgnore private String timestamp = "no delivery made";
   @JsonIgnore private volatile boolean safe = true;
+  @JsonIgnore private final Queue buffer = new Queue();
 
   public Drone() {}
 
@@ -119,6 +123,11 @@ public class Drone implements Comparable<Drone> {
       notify();
     }
   }
+
+  public Queue getBuffer() {
+    return buffer;
+  }
+
 
   @Override
   public String toString() {

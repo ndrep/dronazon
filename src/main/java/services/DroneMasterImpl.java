@@ -1,4 +1,4 @@
-package process;
+package services;
 
 import beans.Drone;
 import com.example.grpc.DroneMasterGrpc.DroneMasterImplBase;
@@ -17,12 +17,8 @@ public class DroneMasterImpl extends DroneMasterImplBase {
 
   @Override
   public void master(Empty request, StreamObserver<Response> responseObserver) {
-    Response response = Response.newBuilder().setId(findDrone(drone, list).getIdMaster()).build();
+    Response response = Response.newBuilder().setId(drone.getIdMaster()).build();
     responseObserver.onNext(response);
     responseObserver.onCompleted();
-  }
-
-  private Drone findDrone(Drone drone, List<Drone> list) {
-    return list.stream().filter(d -> d.getId() == drone.getId()).findFirst().orElse(null);
   }
 }

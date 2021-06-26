@@ -1,4 +1,4 @@
-package process;
+package services;
 
 import beans.Drone;
 import com.example.grpc.Hello.*;
@@ -6,6 +6,8 @@ import com.example.grpc.StartElectionGrpc;
 import com.example.grpc.StartElectionGrpc.*;
 import io.grpc.*;
 import io.grpc.stub.StreamObserver;
+import process.DroneProcess;
+
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
@@ -26,17 +28,16 @@ public class StartElectionImpl extends StartElectionImplBase {
     tmp.setId(request.getId());
     tmp.setBattery(request.getBattery());
 
-      System.out.println(tmp.getId());
-      System.out.println(drone.getId());
 
     try {
       if (tmp.getId() == drone.getId()) {
-          searchDroneInList(drone, list).setIdMaster(drone.getId());
+          LOGGER.info("IO SONO IL NUOVO MASTER");
+        drone.setIdMaster(drone.getId());
       } else if (tmp.compareTo(drone) > 0) {
-          LOGGER.info("IO SONO <");
+        LOGGER.info("IO SONO PIU' PICCOLO");
         startElectionMessage(drone, tmp, list);
       } else {
-          LOGGER.info("IO SONO >");
+        LOGGER.info("IO SONO PIU' GRANDE");
         startElectionMessage(drone, drone, list);
       }
     } catch (InterruptedException e) {
@@ -50,7 +51,6 @@ public class StartElectionImpl extends StartElectionImplBase {
   private void startElectionMessage(Drone drone, Drone tmp, List<Drone> list)
       throws InterruptedException {
     Drone next = nextDrone(drone, list);
-
 
     Context.current()
         .fork()
@@ -72,22 +72,22 @@ public class StartElectionImpl extends StartElectionImplBase {
                     @Override
                     public void onNext(Empty value) {}
 
-                    @Override
-                    public void onError(Throwable t) {
-                      if (t instanceof StatusRuntimeException
-                          && ((StatusRuntimeException) t).getStatus().getCode()
-                              == Status.UNAVAILABLE.getCode()) {
-                        try {
-                          startElectionMessage(drone, tmp, list);
-                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-                        } catch (InterruptedException e) {
-                          channel.shutdownNow();
-                          e.printStackTrace();
-                        }
-                      } else {
-                        t.printStackTrace();
+                      @Override
+                      public void onError(Throwable t) {
+                          try {
+                              if (t instanceof StatusRuntimeException
+                                      && ((StatusRuntimeException) t).getStatus().getCode()
+                                      == Status.UNAVAILABLE.getCode()) {
+                                  startElectionMessage(drone, tmp, list);
+                                  channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                                  channel.shutdown();
+                              }else {
+                                  t.printStackTrace();
+                              }
+                          }catch (Exception e){
+                              e.printStackTrace();
+                          }
                       }
-                    }
 
                     @Override
                     public void onCompleted() {

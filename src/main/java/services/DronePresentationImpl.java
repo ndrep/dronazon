@@ -1,4 +1,4 @@
-package process;
+package services;
 
 import beans.Drone;
 import com.example.grpc.DronePresentationGrpc.*;
@@ -22,9 +22,9 @@ public class DronePresentationImpl extends DronePresentationImplBase {
   @Override
   public void info(Hello.Drone request, StreamObserver<Empty> responseObserver) {
     try {
-      Drone inDrone = new Drone(request.getId(), request.getPort(), request.getAddress());
-      if (isMasterDrone()) inDrone.setPoint(new Point(request.getX(), request.getY()));
-      list.add(inDrone);
+      Drone hello = new Drone(request.getId(), request.getPort(), request.getAddress());
+      if (isMasterDrone()) hello.setPoint(new Point(request.getX(), request.getY()));
+      list.add(hello);
       list.sort(Comparator.comparing(Drone::getId));
     } catch (Exception e) {
       e.printStackTrace();

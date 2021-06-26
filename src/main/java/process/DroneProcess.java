@@ -30,6 +30,7 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import org.codehaus.jackson.jaxrs.JacksonJsonProvider;
 import org.eclipse.paho.client.mqttv3.*;
+import services.*;
 
 public class DroneProcess {
 
@@ -57,25 +58,22 @@ public class DroneProcess {
     List<Drone> list = dp.getAllDronesInRing(url, client);
     Point point = dp.getStartPoint(url, client);
 
-    Drone dlist = dp.searchDroneInList(drone, list);
-
-    dlist.setPoint(point);
+    drone.setPoint(point);
 
     list.sort(Comparator.comparing(Drone::getId));
 
     if (list.size() == 1) {
-      dlist.setIdMaster(drone.getId());
-      dlist.setBattery(100000);
+      drone.setIdMaster(drone.getId());
+      drone.setBattery(100000);
       drone.setIdMaster(drone.getId());
     }
 
-    Queue buffer = new Queue();
 
     try {
-      dp.startAllGrpcServices(drone, list, client, buffer);
+      dp.startAllGrpcServices(drone, list, client, drone.getBuffer());
       if (dp.isMaster(drone.getIdMaster(), drone.getId())) {
-        // dp.startDelivery(list, buffer);
-        // dp.bufferThread(dp, list, buffer);
+        dp.takeDelivery(list, drone.getBuffer());
+        dp.startDelivery(dp, list, drone.getBuffer());
       } else {
         dp.searchMasterInList(drone, list);
         dp.greeting(drone, list);
@@ -89,7 +87,7 @@ public class DroneProcess {
     }
   }
 
-  private void bufferThread(DroneProcess dp, List<Drone> list, Queue buffer) {
+  private void startDelivery(DroneProcess dp, List<Drone> list, Queue buffer) {
     new Thread(
             () -> {
               while (true) {
@@ -158,14 +156,13 @@ public class DroneProcess {
 
   private void buildMessage(Drone drone, List<Drone> list) {
     StringBuilder builder = new StringBuilder();
-    Drone d = searchDroneInList(drone, list);
-    builder.append("ID: ").append(d.getId()).append("\n");
-    builder.append("MASTER: ").append(d.getIdMaster()).append("\n");
-    builder.append("KM: ").append(d.getTot_km()).append("\n");
-    builder.append("DELIVERY: ").append(d.getTot_delivery()).append("\n");
-    builder.append("TIMESTAMP: ").append(d.getTimestamp()).append("\n");
-    builder.append("BATTERY: ").append(d.getBattery()).append("\n");
-    builder.append("POSITION: ").append(d.printPoint()).append("\n");
+    builder.append("ID: ").append(drone.getId()).append("\n");
+    builder.append("MASTER: ").append(drone.getIdMaster()).append("\n");
+    builder.append("KM: ").append(drone.getTot_km()).append("\n");
+    builder.append("DELIVERY: ").append(drone.getTot_delivery()).append("\n");
+    builder.append("TIMESTAMP: ").append(drone.getTimestamp()).append("\n");
+    builder.append("BATTERY: ").append(drone.getBattery()).append("\n");
+    builder.append("POSITION: ").append(drone.printPoint()).append("\n");
     builder.append("LIST: ").append("[");
     for (Drone t : list) {
       builder.append(t.toString()).append(" ");
@@ -238,7 +235,6 @@ public class DroneProcess {
         new StreamObserver<Response>() {
 
           public void onNext(Response response) {
-            searchDroneInList(drone, list).setIdMaster(response.getId());
             drone.setIdMaster(response.getId());
           }
 
@@ -269,9 +265,8 @@ public class DroneProcess {
   }
 
   private void greeting(Drone drone, List<Drone> list) throws InterruptedException {
-    Drone dr = searchDroneInList(drone, list);
     List<Drone> clean =
-        list.stream().filter(d -> d.getId() != dr.getId()).collect(Collectors.toList());
+        list.stream().filter(d -> d.getId() != drone.getId()).collect(Collectors.toList());
 
     for (Drone d : clean) {
 
@@ -284,11 +279,11 @@ public class DroneProcess {
 
       Hello.Drone request =
           Hello.Drone.newBuilder()
-              .setId(dr.getId())
-              .setPort(dr.getPort())
-              .setAddress(dr.getAddress())
-              .setX((int) dr.getPoint().getX())
-              .setY((int) dr.getPoint().getY())
+              .setId(drone.getId())
+              .setPort(drone.getPort())
+              .setAddress(drone.getAddress())
+              .setX((int) drone.getPoint().getX())
+              .setY((int) drone.getPoint().getY())
               .build();
 
       stub.info(
@@ -312,7 +307,7 @@ public class DroneProcess {
               channel.shutdown();
             }
           });
-      channel.awaitTermination(1, TimeUnit.MINUTES);
+      channel.awaitTermination(1, TimeUnit.SECONDS);
     }
   }
 
@@ -323,7 +318,7 @@ public class DroneProcess {
     return clientConfig;
   }
 
-  private void startDelivery(List<Drone> list, Queue buffer) {
+  private void takeDelivery(List<Drone> list, Queue buffer) {
     try {
       String broker = "tcp://localhost:1883";
       String clientId = MqttClient.generateClientId();
@@ -366,17 +361,6 @@ public class DroneProcess {
 
   private void sendDelivery(Delivery delivery, Drone driver, List<Drone> list)
       throws InterruptedException {
-    Thread t =
-        new Thread(
-            () -> {
-              try {
-                checkDroneLife(drone, list);
-              } catch (InterruptedException e) {
-                e.printStackTrace();
-              }
-            });
-    t.start();
-    t.join();
 
     Drone next = nextDrone(drone, list);
 
@@ -411,6 +395,7 @@ public class DroneProcess {
 
                       public void onError(Throwable throwable) {
                         try {
+                          list.remove(next);
                           sendDelivery(delivery, driver, list);
                           channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
                         } catch (InterruptedException e) {
@@ -477,6 +462,7 @@ public class DroneProcess {
                         channel.shutdown();
                       }
                     });
+                channel.awaitTermination(1, TimeUnit.SECONDS);
               } catch (Exception e) {
                 e.printStackTrace();
               }
@@ -508,20 +494,19 @@ public class DroneProcess {
 
                     @Override
                     public void onError(Throwable t) {
-                      if (t instanceof StatusRuntimeException
-                          && ((StatusRuntimeException) t).getStatus().getCode()
-                              == Status.UNAVAILABLE.getCode()) {
                         try {
-                            System.out.println("mando al prossimo");
-                          startElectionMessage(drone, list);
-                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-                        } catch (InterruptedException e) {
-                          channel.shutdownNow();
-                          e.printStackTrace();
+                            if (t instanceof StatusRuntimeException
+                                    && ((StatusRuntimeException) t).getStatus().getCode()
+                                    == Status.UNAVAILABLE.getCode()) {
+                                startElectionMessage(drone, list);
+                                channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                                channel.shutdown();
+                            }else {
+                                t.printStackTrace();
+                            }
+                        }catch (Exception e){
+                            e.printStackTrace();
                         }
-                      } else {
-                        t.printStackTrace();
-                      }
                     }
 
                     @Override

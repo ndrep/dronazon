@@ -1,7 +1,6 @@
-package process;
+package services;
 
 import beans.Drone;
-import com.example.grpc.CheckDroneGrpc;
 import com.example.grpc.DroneDeliveryGrpc;
 import com.example.grpc.DroneDeliveryGrpc.*;
 import com.example.grpc.Hello.*;
@@ -10,10 +9,11 @@ import com.example.grpc.InfoUpdatedGrpc.*;
 import com.sun.jersey.api.client.Client;
 import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.WebResource;
-import io.grpc.Context;
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
+import io.grpc.*;
 import io.grpc.stub.StreamObserver;
+import process.DroneProcess;
+import process.Queue;
+
 import java.awt.*;
 import java.sql.Timestamp;
 import java.util.List;
@@ -47,6 +47,7 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
                 } else if (driverIsDead(request)) {
                   dronazon.Delivery delivery = updateDelivery(request);
                   buffer.push(delivery);
+                  drone.setAvailable(true);
                 } else {
                   forwardDelivery(request);
                 }
@@ -57,6 +58,7 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
               responseObserver.onNext(Empty.newBuilder().build());
               responseObserver.onCompleted();
             });
+    drone.setSafe(true);
   }
 
   private dronazon.Delivery updateDelivery(Delivery request) {
@@ -77,8 +79,6 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
   }
 
   private void forwardDelivery(Delivery request) throws InterruptedException {
-    checkDroneLife(drone, list);
-
     Drone next = getNextDrone(list);
 
     final ManagedChannel channel =
@@ -98,7 +98,12 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
           @Override
           public void onError(Throwable t) {
             try {
-              forwardDelivery(request);
+              if (t instanceof StatusRuntimeException
+                  && ((StatusRuntimeException) t).getStatus().getCode()
+                      == Status.UNAVAILABLE.getCode()){
+                list.remove(next);
+                forwardDelivery(request);
+              }
               channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
               channel.shutdownNow();
@@ -107,28 +112,20 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
 
           @Override
           public void onCompleted() {
-            drone.setSafe(true);
             channel.shutdownNow();
           }
+
         });
   }
 
   private void makeDelivery(Delivery request) throws InterruptedException {
-    int IdMaster =
-        list.stream()
-            .filter(d -> d.getId() == drone.getId())
-            .findFirst()
-            .orElse(null)
-            .getIdMaster();
-
-    Drone master = list.stream().filter(d -> d.getId() == IdMaster).findFirst().orElse(null);
-
-    Drone updated = list.get(list.indexOf(searchDroneById(request.getIdDriver())));
+    Drone master =
+        list.stream().filter(d -> d.getId() == drone.getIdMaster()).findFirst().orElse(null);
 
     Thread.sleep(5000);
 
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
-    updateDroneInfo(request, updated, timestamp);
+    updateDroneInfo(request, timestamp);
 
     assert master != null;
 
@@ -141,13 +138,13 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
 
     DroneInfo info =
         DroneInfo.newBuilder()
-            .setId(updated.getId())
-            .setTimestamp(timestamp.toString())
-            .setKm(updated.getTot_km())
-            .setBattery(updated.getBattery())
+            .setId(drone.getId())
+            .setTimestamp(drone.getTimestamp())
+            .setKm(drone.getTot_km())
+            .setBattery(drone.getBattery())
             .setX(request.getEndX())
             .setY(request.getEndY())
-            .setTotDelivery(updated.getTot_delivery())
+            .setTotDelivery(drone.getTot_delivery())
             .build();
 
     stub.message(
@@ -158,6 +155,7 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
 
           @Override
           public void onError(Throwable t) {
+            // TODO caso in cui master dovesse fallire...
             try {
               channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
@@ -168,7 +166,7 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
           @Override
           public void onCompleted() {
             String url = "http://localhost:6789";
-            if (updated.getBattery() < 15 && updated.getId() != updated.getIdMaster()) {
+            if (drone.getBattery() < 15 && drone.getId() != drone.getIdMaster()) {
               WebResource webResource = client.resource(url + "/api/remove");
               ClientResponse response =
                   webResource.type("application/json").post(ClientResponse.class, drone.getId());
@@ -184,19 +182,15 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
         });
   }
 
-  private void updateDroneInfo(Delivery request, Drone updated, Timestamp timestamp) {
-    updated.setBattery(updated.getBattery() - 10);
-    updated.setTot_delivery(updated.getTot_delivery() + 1);
-    updated.setTimestamp(timestamp.toString());
+  private void updateDroneInfo(Delivery request, Timestamp timestamp) {
+    drone.setBattery(drone.getBattery() - 10);
+    drone.setTot_delivery(drone.getTot_delivery() + 1);
+    drone.setTimestamp(timestamp.toString());
     Point start = new Point(request.getStartX(), request.getStartY());
     Point end = new Point(request.getEndX(), request.getEndY());
-    double distance = updated.getPoint().distance(start) + start.distance(end);
-    updated.setTot_km(updated.getTot_km() + distance);
-    updated.setPoint(end);
-  }
-
-  private Drone searchDroneById(int id) {
-    return list.stream().filter(d -> isDriver(d.getId(), id)).findFirst().get();
+    double distance = drone.getPoint().distance(start) + start.distance(end);
+    drone.setTot_km(drone.getTot_km() + distance);
+    drone.setPoint(end);
   }
 
   private Drone getNextDrone(List<Drone> list) {
@@ -206,51 +200,5 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
 
   private Drone findDrone(List<Drone> list) {
     return list.stream().filter(d -> isDriver(d.getId(), drone.getId())).findFirst().orElse(null);
-  }
-
-  private void checkDroneLife(Drone drone, List<Drone> list) throws InterruptedException {
-    Drone next = findDrone(list);
-
-    Context.current()
-        .fork()
-        .run(
-            () -> {
-              try {
-
-                final ManagedChannel channel =
-                    ManagedChannelBuilder.forTarget(next.getAddress() + ":" + next.getPort())
-                        .usePlaintext()
-                        .build();
-
-                CheckDroneGrpc.CheckDroneStub stub = CheckDroneGrpc.newStub(channel);
-
-                Empty request = Empty.newBuilder().build();
-
-                stub.check(
-                    request,
-                    new StreamObserver<Empty>() {
-                      @Override
-                      public void onNext(Empty value) {}
-
-                      @Override
-                      public void onError(Throwable t) {
-                        try {
-                          list.remove(next);
-                          checkDroneLife(drone, list);
-                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-                        } catch (InterruptedException e) {
-                          channel.shutdownNow();
-                        }
-                      }
-
-                      @Override
-                      public void onCompleted() {
-                        channel.shutdown();
-                      }
-                    });
-              } catch (Exception e) {
-                e.printStackTrace();
-              }
-            });
   }
 }
