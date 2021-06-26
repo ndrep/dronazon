@@ -68,7 +68,6 @@ public class DroneProcess {
       drone.setIdMaster(drone.getId());
     }
 
-
     try {
       dp.startAllGrpcServices(drone, list, client, drone.getBuffer());
       if (dp.isMaster(drone.getIdMaster(), drone.getId())) {
@@ -181,6 +180,7 @@ public class DroneProcess {
             .addService(new InfoUpdatedImpl(drone, list))
             .addService(new DroneCheckImpl())
             .addService(new StartElectionImpl(drone, list))
+            .addService(new EndElectionImpl(drone, list))
             .build();
     service.start();
   }
@@ -494,24 +494,25 @@ public class DroneProcess {
 
                     @Override
                     public void onError(Throwable t) {
-                        try {
-                            if (t instanceof StatusRuntimeException
-                                    && ((StatusRuntimeException) t).getStatus().getCode()
-                                    == Status.UNAVAILABLE.getCode()) {
-                                startElectionMessage(drone, list);
-                                channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-                                channel.shutdown();
-                            }else {
-                                t.printStackTrace();
-                            }
-                        }catch (Exception e){
-                            e.printStackTrace();
+                      try {
+                        if (t instanceof StatusRuntimeException
+                            && ((StatusRuntimeException) t).getStatus().getCode()
+                                == Status.UNAVAILABLE.getCode()) {
+                          startElectionMessage(drone, list);
+                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                          channel.shutdown();
+                        } else {
+                          t.printStackTrace();
                         }
+                      } catch (Exception e) {
+                        e.printStackTrace();
+                      }
                     }
 
                     @Override
                     public void onCompleted() {
                       try {
+                        drone.setElection(true);
                         channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
                       } catch (InterruptedException e) {
                         channel.shutdownNow();

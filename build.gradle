@@ -62,7 +62,7 @@ protobuf {
 		}
 	}
 }
-/*
+
 spotless {
 	format 'misc', {
 		target '*.gradle', '*.md', '.gitignore'
@@ -74,8 +74,6 @@ spotless {
 		googleJavaFormat()
 	}
 }
-
- */
 
 test {
 	useJUnitPlatform()

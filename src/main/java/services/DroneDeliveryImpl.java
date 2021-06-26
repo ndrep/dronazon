@@ -11,14 +11,13 @@ import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.WebResource;
 import io.grpc.*;
 import io.grpc.stub.StreamObserver;
-import process.DroneProcess;
-import process.Queue;
-
 import java.awt.*;
 import java.sql.Timestamp;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
+import process.DroneProcess;
+import process.Queue;
 
 public class DroneDeliveryImpl extends DroneDeliveryImplBase {
   private final Drone drone;
@@ -100,7 +99,7 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
             try {
               if (t instanceof StatusRuntimeException
                   && ((StatusRuntimeException) t).getStatus().getCode()
-                      == Status.UNAVAILABLE.getCode()){
+                      == Status.UNAVAILABLE.getCode()) {
                 list.remove(next);
                 forwardDelivery(request);
               }
@@ -114,7 +113,6 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
           public void onCompleted() {
             channel.shutdownNow();
           }
-
         });
   }
 

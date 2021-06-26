@@ -39,6 +39,10 @@ message Election {
   int32 battery = 2;
 }
 
+message Elected {
+  int32 master = 1;
+}
+
 service CheckDrone {
   rpc check(Empty) returns (Empty);
 }
@@ -64,5 +68,5 @@ service StartElection {
 }
 
 service EndElection {
-  rpc end(Election) returns (Empty);
+  rpc end(Elected) returns (Empty);
 }

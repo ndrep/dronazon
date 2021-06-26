@@ -4,8 +4,6 @@ import java.awt.*;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlRootElement;
-
-import dronazon.Delivery;
 import org.codehaus.jackson.annotate.JsonIgnore;
 import process.Queue;
 
@@ -22,7 +20,8 @@ public class Drone implements Comparable<Drone> {
   @JsonIgnore private int tot_delivery;
   @JsonIgnore private double tot_km;
   @JsonIgnore private String timestamp = "no delivery made";
-  @JsonIgnore private volatile boolean safe = true;
+  @JsonIgnore private boolean safe = true;
+  @JsonIgnore private boolean election = false;
   @JsonIgnore private final Queue buffer = new Queue();
 
   public Drone() {}
@@ -128,6 +127,13 @@ public class Drone implements Comparable<Drone> {
     return buffer;
   }
 
+  public void setElection(boolean election) {
+    this.election = election;
+  }
+
+  public boolean getElection() {
+    return election;
+  }
 
   @Override
   public String toString() {
