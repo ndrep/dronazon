@@ -15,7 +15,7 @@ public class Queue {
   }
 
   public synchronized Delivery pop(List<Drone> list) {
-    while (buffer.size() == 0 || !available(list)) {
+    while (buffer.size() == 0) {
       try {
         wait();
       } catch (InterruptedException e) {
@@ -29,7 +29,7 @@ public class Queue {
     return delivery;
   }
 
-  private boolean available(List<Drone> list) {
-    return list.stream().anyMatch(Drone::getAvailable);
+  public int size() {
+    return buffer.size();
   }
 }

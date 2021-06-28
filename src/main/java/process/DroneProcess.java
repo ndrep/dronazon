@@ -45,18 +45,18 @@ public class DroneProcess {
     return drone;
   }
 
-  public static void main(String[] args) {
-    String url = "http://localhost:6789";
+  public static void main(String[] args) throws MqttException {
     Random rand = new Random(System.currentTimeMillis());
     DroneProcess dp =
-        new DroneProcess(new Drone(rand.nextInt(100), rand.nextInt(8080) + 1000, "localhost"));
+        new DroneProcess(new Drone(rand.nextInt(1000), rand.nextInt(8080) + 1000, "localhost"));
     Drone drone = dp.getDrone();
+    MqttClient mqtt = drone.connect();
 
     ClientConfig clientConfig = dp.config();
     Client client = Client.create(clientConfig);
 
-    List<Drone> list = dp.getAllDronesInRing(url, client);
-    Point point = dp.getStartPoint(url, client);
+    List<Drone> list = dp.getAllDronesInRing(client);
+    Point point = dp.getStartPoint(client);
 
     drone.setPoint(point);
 
@@ -71,30 +71,34 @@ public class DroneProcess {
     try {
       dp.startAllGrpcServices(drone, list, client, drone.getBuffer());
       if (dp.isMaster(drone.getIdMaster(), drone.getId())) {
-        dp.takeDelivery(list, drone.getBuffer());
-        dp.startDelivery(dp, list, drone.getBuffer());
+        dp.takeDelivery(drone.getBuffer(), mqtt);
+        dp.startDelivery(list, drone.getBuffer());
       } else {
         dp.searchMasterInList(drone, list);
         dp.greeting(drone, list);
       }
       dp.printInfo(drone, list);
-      dp.quit(url, drone, client);
-      System.exit(0);
+      dp.quit(drone, client, mqtt, list);
 
     } catch (IOException | InterruptedException e) {
       e.printStackTrace();
     }
   }
 
-  private void startDelivery(DroneProcess dp, List<Drone> list, Queue buffer) {
+  private void startDelivery(List<Drone> list, Queue buffer) {
     new Thread(
             () -> {
               while (true) {
                 try {
                   Delivery delivery = buffer.pop(list);
-                  Drone driver = defineDroneOfDelivery(list, delivery.getStart());
-                  driver.setAvailable(false);
-                  dp.sendDelivery(delivery, driver, list);
+                  if (available(list)) {
+                    Drone driver = defineDroneOfDelivery(list, delivery.getStart());
+                    driver.setAvailable(false);
+                    sendDelivery(delivery, driver, list);
+                  } else {
+                    buffer.push(delivery);
+                  }
+
                 } catch (InterruptedException e) {
                   e.printStackTrace();
                 }
@@ -103,22 +107,45 @@ public class DroneProcess {
         .start();
   }
 
-  private void quit(String url, Drone drone, Client client) throws InterruptedException {
-    Thread t =
-        new Thread(
+  private boolean available(List<Drone> list) {
+    return list.stream().anyMatch(Drone::getAvailable);
+  }
+
+  private void quit(Drone drone, Client client, MqttClient mqttClient, List<Drone> list)
+      throws InterruptedException {
+
+    new Thread(
             () -> {
               Scanner sc = new Scanner(System.in);
               String input = sc.nextLine().toLowerCase(Locale.ROOT);
               while (!input.equals("quit")) {
                 input = sc.nextLine().toLowerCase(Locale.ROOT);
               }
-              WebResource webResource = client.resource(url + "/api/remove");
-              ClientResponse response =
-                  webResource.type("application/json").post(ClientResponse.class, drone.getId());
+              if (isMaster(drone.getId(), drone.getIdMaster())) {
+                try {
+                  mqttClient.disconnect();
+                  Queue buffer = drone.getBuffer();
+                  while (buffer.size() > 0) {
+                    Delivery delivery = buffer.pop(list);
+                    Thread.sleep(5000);
+                    if (available(list)) {
+                      LOGGER.info("1");
+                      Drone driver = defineDroneOfDelivery(list, delivery.getStart());
+                      driver.setAvailable(false);
+                      sendDelivery(delivery, driver, list);
+                      LOGGER.info(buffer.size() + "");
+                    } else {
+                      buffer.push(delivery);
+                    }
+                  }
 
-              if (response.getStatus() != 200) {
-                throw new RuntimeException("Failed : HTTP error code : " + response.getStatus());
+                } catch (MqttException | InterruptedException e) {
+                  e.printStackTrace();
+                }
               }
+
+              removeFromServerList(drone, client);
+
               synchronized (drone) {
                 if (!drone.getSafe()) {
                   try {
@@ -128,14 +155,23 @@ public class DroneProcess {
                   }
                 }
               }
-            });
-    t.start();
-    t.join();
+              System.exit(0);
+            })
+        .start();
+  }
+
+  private void removeFromServerList(Drone drone, Client client) {
+    WebResource webResource = client.resource("http://localhost:6789" + "/api/remove");
+    ClientResponse response =
+        webResource.type("application/json").post(ClientResponse.class, drone.getId());
+
+    if (response.getStatus() != 200) {
+      throw new RuntimeException("Failed : HTTP error code : " + response.getStatus());
+    }
   }
 
   private void printInfo(Drone drone, List<Drone> list) {
-    Thread print =
-        new Thread(
+    new Thread(
             () -> {
               while (true) {
                 try {
@@ -148,9 +184,8 @@ public class DroneProcess {
                   e.printStackTrace();
                 }
               }
-            });
-
-    print.start();
+            })
+        .start();
   }
 
   private void buildMessage(Drone drone, List<Drone> list) {
@@ -162,11 +197,12 @@ public class DroneProcess {
     builder.append("TIMESTAMP: ").append(drone.getTimestamp()).append("\n");
     builder.append("BATTERY: ").append(drone.getBattery()).append("\n");
     builder.append("POSITION: ").append(drone.printPoint()).append("\n");
-    builder.append("LIST: ").append("[");
+    builder.append("LIST: ").append("[\n");
     for (Drone t : list) {
-      builder.append(t.toString()).append(" ");
+      builder.append(t.toString()).append(" \n");
     }
     builder.append("]");
+
     LOGGER.info("\n" + builder + "\n");
   }
 
@@ -189,8 +225,8 @@ public class DroneProcess {
     return idMaster == id;
   }
 
-  private Point getStartPoint(String url, Client client) {
-    WebResource webResource = client.resource(url + "/api/point");
+  private Point getStartPoint(Client client) {
+    WebResource webResource = client.resource("http://localhost:6789" + "/api/point");
 
     ClientResponse info_point = webResource.type("application/json").get(ClientResponse.class);
 
@@ -201,14 +237,14 @@ public class DroneProcess {
     return info_point.getEntity(Point.class);
   }
 
-  private List<Drone> getAllDronesInRing(String url, Client client) {
-    WebResource webResource = client.resource(url + "/api/add");
+  private List<Drone> getAllDronesInRing(Client client) {
+    WebResource webResource = client.resource("http://localhost:6789" + "/api/add");
 
     ClientResponse response =
         webResource.type("application/json").post(ClientResponse.class, drone);
 
     if (response.getStatus() != 200) {
-        System.exit(0);
+      System.exit(0);
       throw new RuntimeException("Failed : HTTP error code : " + response.getStatus());
     }
 
@@ -216,7 +252,7 @@ public class DroneProcess {
   }
 
   private Drone searchDroneInList(Drone drone, List<Drone> list) {
-    return list.stream().filter(d -> isMaster(d.getId(), drone.getId())).findFirst().orElse(null);
+    return list.stream().filter(d -> d.getId() == drone.getId()).findFirst().orElse(null);
   }
 
   private void searchMasterInList(Drone drone, List<Drone> list) throws InterruptedException {
@@ -319,13 +355,10 @@ public class DroneProcess {
     return clientConfig;
   }
 
-  private void takeDelivery(List<Drone> list, Queue buffer) {
+  private void takeDelivery(Queue buffer, MqttClient client) {
     try {
-      String broker = "tcp://localhost:1883";
-      String clientId = MqttClient.generateClientId();
       String topic = "dronazon/smartcity/orders";
       int qos = 0;
-      MqttClient client = configClientMQTT(broker, clientId);
 
       client.setCallback(
           new MqttCallback() {
@@ -352,17 +385,10 @@ public class DroneProcess {
     }
   }
 
-  private MqttClient configClientMQTT(String broker, String clientId) throws MqttException {
-    MqttClient client = new MqttClient(broker, clientId);
-    MqttConnectOptions connOpts = new MqttConnectOptions();
-    connOpts.setCleanSession(true);
-    client.connect(connOpts);
-    return client;
-  }
-
   private void sendDelivery(Delivery delivery, Drone driver, List<Drone> list)
       throws InterruptedException {
 
+    drone.setSafe(false);
     Drone next = nextDrone(drone, list);
 
     Context.current()
@@ -405,6 +431,7 @@ public class DroneProcess {
                       }
 
                       public void onCompleted() {
+                        drone.setSafe(true);
                         channel.shutdown();
                       }
                     });
@@ -447,6 +474,7 @@ public class DroneProcess {
                           list.remove(next);
                           try {
                             if (isMaster(next.getId(), drone.getIdMaster())) {
+                              drone.setElection(true);
                               startElectionMessage(drone, list);
                             } else {
                               checkDroneLife(drone, list);
@@ -525,6 +553,7 @@ public class DroneProcess {
   }
 
   private Drone defineDroneOfDelivery(List<Drone> list, Point start) {
+    // list.sort(Comparator.comparing(Drone::getBattery).thenComparing(Drone::getId));
     return list.stream()
         .filter(Drone::getAvailable)
         .min(Comparator.comparing(d -> d.getPoint().distance(start)))

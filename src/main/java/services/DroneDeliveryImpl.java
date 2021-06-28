@@ -46,7 +46,7 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
                 } else if (driverIsDead(request)) {
                   dronazon.Delivery delivery = updateDelivery(request);
                   buffer.push(delivery);
-                  drone.setAvailable(true);
+                  getDriver(request).setAvailable(true);
                 } else {
                   forwardDelivery(request);
                 }
@@ -58,6 +58,10 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
               responseObserver.onCompleted();
             });
     drone.setSafe(true);
+  }
+
+  private Drone getDriver(Delivery request) {
+    return list.stream().filter(d -> d.getId() == request.getIdDriver()).findFirst().orElse(null);
   }
 
   private dronazon.Delivery updateDelivery(Delivery request) {
@@ -78,7 +82,8 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
   }
 
   private void forwardDelivery(Delivery request) throws InterruptedException {
-    Drone next = getNextDrone(list);
+    drone.setSafe(false);
+    Drone next = nextDrone(drone, list);
 
     final ManagedChannel channel =
         ManagedChannelBuilder.forTarget(next.getAddress() + ":" + next.getPort())
@@ -111,14 +116,15 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
 
           @Override
           public void onCompleted() {
+            drone.setSafe(true);
             channel.shutdownNow();
           }
         });
   }
 
   private void makeDelivery(Delivery request) throws InterruptedException {
-    Drone master =
-        list.stream().filter(d -> d.getId() == drone.getIdMaster()).findFirst().orElse(null);
+    drone.setSafe(false);
+    Drone master = getMaster();
 
     Thread.sleep(5000);
 
@@ -163,21 +169,29 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
 
           @Override
           public void onCompleted() {
-            String url = "http://localhost:6789";
+            drone.setSafe(true);
             if (drone.getBattery() < 15 && drone.getId() != drone.getIdMaster()) {
-              WebResource webResource = client.resource(url + "/api/remove");
-              ClientResponse response =
-                  webResource.type("application/json").post(ClientResponse.class, drone.getId());
-
-              if (response.getStatus() != 200) {
-                throw new RuntimeException("Failed : HTTP error code : " + response.getStatus());
-              }
+              removeFromServerList();
               channel.shutdownNow();
               System.exit(0);
             }
             channel.shutdownNow();
           }
         });
+  }
+
+  private void removeFromServerList() {
+    WebResource webResource = client.resource("http://localhost:6789" + "/api/remove");
+    ClientResponse response =
+        webResource.type("application/json").post(ClientResponse.class, drone.getId());
+
+    if (response.getStatus() != 200) {
+      throw new RuntimeException("Failed : HTTP error code : " + response.getStatus());
+    }
+  }
+
+  private Drone getMaster() {
+    return list.stream().filter(d -> d.getId() == drone.getIdMaster()).findFirst().orElse(null);
   }
 
   private void updateDroneInfo(Delivery request, Timestamp timestamp) {
@@ -191,12 +205,12 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
     drone.setPoint(end);
   }
 
-  private Drone getNextDrone(List<Drone> list) {
-    int index = list.indexOf(findDrone(list));
+  private Drone nextDrone(Drone drone, List<Drone> list) {
+    int index = list.indexOf(searchDroneInList(drone, list));
     return list.get((index + 1) % list.size());
   }
 
-  private Drone findDrone(List<Drone> list) {
-    return list.stream().filter(d -> isDriver(d.getId(), drone.getId())).findFirst().orElse(null);
+  private Drone searchDroneInList(Drone drone, List<Drone> list) {
+    return list.stream().filter(d -> d.getId() == drone.getId()).findFirst().orElse(null);
   }
 }

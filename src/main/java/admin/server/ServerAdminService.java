@@ -59,9 +59,9 @@ public class ServerAdminService {
   @Produces({"application/json"})
   public Response addDrone(Drone drone) {
     List<Drone> list = SmartCity.getInstance().add(drone);
-    if (list.stream().filter(d -> d.getId() == drone.getId()).count() > 1){
+    if (list.stream().filter(d -> d.getId() == drone.getId()).count() > 1) {
       list.remove(drone);
-      return Response.status(201).build();
+      return Response.status(400).build();
     }
     GenericEntity<List<Drone>> entity = new GenericEntity<List<Drone>>(list) {};
     return Response.status(200).entity(entity).build();

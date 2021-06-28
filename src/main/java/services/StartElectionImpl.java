@@ -93,7 +93,6 @@ public class StartElectionImpl extends StartElectionImplBase {
                     @Override
                     public void onCompleted() {
                       try {
-                        drone.setElection(true);
                         channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
                       } catch (InterruptedException e) {
                         channel.shutdownNow();

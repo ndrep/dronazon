@@ -24,21 +24,21 @@ public class InfoUpdatedImpl extends InfoUpdatedImplBase {
   }
 
   private void updateDroneInfoInList(DroneInfo request) {
-    Drone updated = findDrone(request.getId());
-    if (updated.getBattery() < 15) {
+    Drone updated = searchDroneInList(request.getId(), list);
+    if (request.getBattery() < 15) {
       list.remove(updated);
     } else {
-      updated.setAvailable(true);
-      updated.setBattery(request.getBattery());
-      updated.setPoint(new Point(request.getX(), request.getY()));
-      updated.setTot_km(request.getKm());
-      updated.setTot_delivery(request.getTotDelivery());
-      updated.setTimestamp(request.getTimestamp());
+      updateDroneInfoInList(request, updated);
     }
   }
 
-  private Drone findDrone(int id) {
-    return list.get(list.indexOf(searchDroneInList(id, list)));
+  private void updateDroneInfoInList(DroneInfo request, Drone updated) {
+    updated.setAvailable(true);
+    updated.setBattery(request.getBattery());
+    updated.setPoint(new Point(request.getX(), request.getY()));
+    updated.setTot_km(request.getKm());
+    updated.setTot_delivery(request.getTotDelivery());
+    updated.setTimestamp(request.getTimestamp());
   }
 
   private Drone searchDroneInList(int id, List<Drone> list) {

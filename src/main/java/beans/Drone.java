@@ -5,6 +5,9 @@ import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlRootElement;
 import org.codehaus.jackson.annotate.JsonIgnore;
+import org.eclipse.paho.client.mqttv3.MqttClient;
+import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
+import org.eclipse.paho.client.mqttv3.MqttException;
 import process.Queue;
 
 @XmlRootElement
@@ -19,10 +22,11 @@ public class Drone implements Comparable<Drone> {
   @JsonIgnore private int idMaster;
   @JsonIgnore private int tot_delivery;
   @JsonIgnore private double tot_km;
-  @JsonIgnore private String timestamp = "no delivery made";
+  @JsonIgnore private String timestamp = "NONE";
   @JsonIgnore private boolean safe = true;
   @JsonIgnore private boolean election = false;
   @JsonIgnore private final Queue buffer = new Queue();
+  @JsonIgnore private final MqttClient client = null;
 
   public Drone() {}
 
@@ -131,13 +135,17 @@ public class Drone implements Comparable<Drone> {
     this.election = election;
   }
 
-  public boolean getElection() {
-    return election;
+  public MqttClient connect() throws MqttException {
+    MqttClient client = new MqttClient("tcp://localhost:1883", MqttClient.generateClientId());
+    MqttConnectOptions connOpts = new MqttConnectOptions();
+    connOpts.setCleanSession(true);
+    client.connect(connOpts);
+    return client;
   }
 
   @Override
   public String toString() {
-    return " id=" + id + " ";
+    return "id=" + id + ", battery=" + battery;
   }
 
   public String printPoint() {
