@@ -10,6 +10,9 @@ import com.example.grpc.InfoUpdatedGrpc;
 import com.example.grpc.InfoUpdatedGrpc.*;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.sun.jersey.api.client.Client;
+import com.sun.jersey.api.client.ClientResponse;
+import com.sun.jersey.api.client.WebResource;
 import dronazon.Delivery;
 import io.grpc.*;
 import io.grpc.stub.StreamObserver;
@@ -23,81 +26,109 @@ import process.Queue;
 public class EndElectionImpl extends EndElectionImplBase {
   private final Drone drone;
   private final List<Drone> list;
+  private final Client client;
 
-  public EndElectionImpl(Drone drone, List<Drone> list) {
+  public EndElectionImpl(Drone drone, List<Drone> list, Client client) {
     this.drone = drone;
     this.list = list;
+    this.client = client;
   }
 
   @Override
   public void end(Elected request, StreamObserver<Empty> responseObserver) {
-    drone.setIdMaster(request.getMaster());
-    if (drone.getId() != request.getMaster()) {
+    if (drone.getId() == drone.getIdMaster() && !drone.getElection()) {
+      list.forEach(d -> d.setAvailable(false));
+      drone.setAvailable(true);
+      drone.setElection(true);
+      forwardElectionMessage(drone, list);
+      responseObserver.onNext(Empty.newBuilder().build());
+      responseObserver.onCompleted();
+    } else if (drone.getId() != drone.getIdMaster()) {
+      drone.setIdMaster(request.getMaster());
       forwardElectionMessage(drone, list);
       responseObserver.onNext(Empty.newBuilder().build());
       responseObserver.onCompleted();
     } else {
-      responseObserver.onNext(Empty.newBuilder().build());
-      responseObserver.onCompleted();
+      try {
+        drone.setElection(false);
+        updateNewMasterInList();
+        takeDelivery(drone.getBuffer(), drone.connect());
+        startDelivery(list, drone.getBuffer());
+        responseObserver.onNext(Empty.newBuilder().build());
+        responseObserver.onCompleted();
+      } catch (MqttException e) {
+        e.printStackTrace();
+      }
     }
+  }
+
+  private void updateNewMasterInList() {
+    Drone master = searchDroneInList(drone, list);
+    master.setElection(false);
+    master.setIdMaster(drone.getId());
+    master.setBattery(drone.getBattery());
+    master.setPoint(drone.getPoint());
+    master.setTot_km(drone.getTot_km());
+    master.setTot_delivery(drone.getTot_delivery());
+    master.setTimestamp(drone.getTimestamp());
   }
 
   private void sendInfoToNewMaster(Drone drone, List<Drone> list) {
     Drone master = getMaster(drone, list);
+    Context.current()
+        .fork()
+        .run(
+            () -> {
+              final ManagedChannel channel =
+                  ManagedChannelBuilder.forTarget(master.getAddress() + ":" + master.getPort())
+                      .usePlaintext()
+                      .build();
 
-    final ManagedChannel channel =
-        ManagedChannelBuilder.forTarget(master.getAddress() + ":" + master.getPort())
-            .usePlaintext()
-            .build();
+              InfoUpdatedStub stub = InfoUpdatedGrpc.newStub(channel);
 
-    InfoUpdatedStub stub = InfoUpdatedGrpc.newStub(channel);
+              Point point = drone.getPoint();
+              DroneInfo info =
+                  DroneInfo.newBuilder()
+                      .setId(drone.getId())
+                      .setTimestamp(drone.getTimestamp())
+                      .setKm(drone.getTot_km())
+                      .setBattery(drone.getBattery())
+                      .setX((int) point.getX())
+                      .setY((int) point.getY())
+                      .setTotDelivery(drone.getTot_delivery())
+                      .build();
 
-    Point point = drone.getPoint();
-    DroneInfo info =
-        DroneInfo.newBuilder()
-            .setId(drone.getId())
-            .setTimestamp(drone.getTimestamp())
-            .setKm(drone.getTot_km())
-            .setBattery(drone.getBattery())
-            .setX((int) point.getX())
-            .setY((int) point.getY())
-            .setTotDelivery(drone.getTot_delivery())
-            .build();
+              stub.message(
+                  info,
+                  new StreamObserver<Empty>() {
+                    @Override
+                    public void onNext(Empty value) {}
 
-    stub.message(
-        info,
-        new StreamObserver<Empty>() {
-          @Override
-          public void onNext(Empty value) {}
+                    @Override
+                    public void onError(Throwable t) {
+                      try {
+                        if (t instanceof StatusRuntimeException
+                            && ((StatusRuntimeException) t).getStatus().getCode()
+                                == Status.UNAVAILABLE.getCode()) {
+                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                        }
+                      } catch (Exception e) {
+                        channel.shutdownNow();
+                        e.printStackTrace();
+                      }
+                    }
 
-          @Override
-          public void onError(Throwable t) {
-            try {
-              if (t instanceof StatusRuntimeException
-                  && ((StatusRuntimeException) t).getStatus().getCode()
-                      == Status.UNAVAILABLE.getCode()) {
-                drone.setElection(false);
-                channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-                channel.shutdownNow();
-              } else {
-                t.printStackTrace();
-              }
-
-            } catch (Exception e) {
-              e.printStackTrace();
-            }
-          }
-
-          @Override
-          public void onCompleted() {
-            try {
-              channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-              e.printStackTrace();
-            }
-            channel.shutdownNow();
-          }
-        });
+                    @Override
+                    public void onCompleted() {
+                      try {
+                        channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                      } catch (InterruptedException e) {
+                        channel.shutdownNow();
+                        e.printStackTrace();
+                      }
+                    }
+                  });
+            });
   }
 
   private Drone getMaster(Drone drone, List<Drone> list) {
@@ -133,6 +164,7 @@ public class EndElectionImpl extends EndElectionImplBase {
                             && ((StatusRuntimeException) t).getStatus().getCode()
                                 == Status.UNAVAILABLE.getCode()) {
                           list.remove(next);
+
                           forwardElectionMessage(drone, list);
                           channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
                         }
@@ -145,7 +177,6 @@ public class EndElectionImpl extends EndElectionImplBase {
                     @Override
                     public void onCompleted() {
                       try {
-                        drone.setElection(false);
                         sendInfoToNewMaster(drone, list);
                         channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
                       } catch (InterruptedException e) {
@@ -171,7 +202,10 @@ public class EndElectionImpl extends EndElectionImplBase {
             () -> {
               while (true) {
                 try {
-                  Delivery delivery = buffer.pop(list);
+                  Delivery delivery = buffer.pop();
+                  if (list.isEmpty()) {
+                    quit(list, buffer, delivery);
+                  }
                   if (available(list)) {
                     Drone driver = defineDroneOfDelivery(list, delivery.getStart());
                     driver.setAvailable(false);
@@ -179,8 +213,11 @@ public class EndElectionImpl extends EndElectionImplBase {
                   } else {
                     buffer.push(delivery);
                   }
+                  if (list.size() == 1) {
+                    list.get(0).setAvailable(true);
+                  }
 
-                } catch (InterruptedException e) {
+                } catch (InterruptedException | MqttException e) {
                   e.printStackTrace();
                 }
               }
@@ -188,8 +225,46 @@ public class EndElectionImpl extends EndElectionImplBase {
         .start();
   }
 
+  private void quit(List<Drone> list, Queue buffer, Delivery delivery)
+      throws MqttException, InterruptedException {
+    drone.getClient().disconnect();
+    while (buffer.size() > 0) {
+      Thread.sleep(5000);
+      if (available(list)) {
+        Drone driver = defineDroneOfDelivery(list, delivery.getStart());
+        driver.setAvailable(false);
+        sendDelivery(delivery, driver, list);
+      } else {
+        buffer.push(delivery);
+      }
+    }
+    removeFromServerList(drone, client);
+    synchronized (drone) {
+      if (!drone.getSafe()) {
+        try {
+          drone.wait();
+        } catch (InterruptedException e) {
+          e.printStackTrace();
+        }
+      }
+    }
+    System.exit(0);
+  }
+
+  private void removeFromServerList(Drone drone, Client client) {
+    WebResource webResource = client.resource("http://localhost:6789" + "/api/remove");
+    ClientResponse response =
+        webResource.type("application/json").post(ClientResponse.class, drone.getId());
+
+    if (response.getStatus() != 200) {
+      throw new RuntimeException("Failed : HTTP error code : " + response.getStatus());
+    }
+  }
+
   private boolean available(List<Drone> list) {
-    return list.stream().anyMatch(Drone::getAvailable);
+    synchronized (list) {
+      return list.stream().anyMatch(Drone::getAvailable);
+    }
   }
 
   private Drone defineDroneOfDelivery(List<Drone> list, Point start) {
@@ -231,8 +306,8 @@ public class EndElectionImpl extends EndElectionImplBase {
 
   private void sendDelivery(Delivery delivery, Drone driver, List<Drone> list)
       throws InterruptedException {
-
     drone.setSafe(false);
+
     Drone next = nextDrone(drone, list);
 
     Context.current()
@@ -264,11 +339,17 @@ public class EndElectionImpl extends EndElectionImplBase {
                     new StreamObserver<Empty>() {
                       public void onNext(Empty response) {}
 
-                      public void onError(Throwable throwable) {
+                      public void onError(Throwable t) {
                         try {
-                          list.remove(next);
-                          sendDelivery(delivery, driver, list);
-                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                          if (t instanceof StatusRuntimeException
+                              && ((StatusRuntimeException) t).getStatus().getCode()
+                                  == Status.UNAVAILABLE.getCode()) {
+
+                            list.remove(next);
+
+                            sendDelivery(delivery, driver, list);
+                            channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                          }
                         } catch (InterruptedException e) {
                           channel.shutdownNow();
                         }
@@ -276,10 +357,14 @@ public class EndElectionImpl extends EndElectionImplBase {
 
                       public void onCompleted() {
                         drone.setSafe(true);
-                        channel.shutdown();
+                        try {
+                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                        } catch (InterruptedException e) {
+                          channel.shutdownNow();
+                          e.printStackTrace();
+                        }
                       }
                     });
-                channel.awaitTermination(1, TimeUnit.MINUTES);
               } catch (Exception e) {
                 e.printStackTrace();
               }

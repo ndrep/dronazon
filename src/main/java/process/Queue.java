@@ -1,9 +1,7 @@
 package process;
 
-import beans.Drone;
 import dronazon.Delivery;
 import java.util.ArrayList;
-import java.util.List;
 
 public class Queue {
 
@@ -14,7 +12,7 @@ public class Queue {
     notify();
   }
 
-  public synchronized Delivery pop(List<Drone> list) {
+  public synchronized Delivery pop() {
     while (buffer.size() == 0) {
       try {
         wait();

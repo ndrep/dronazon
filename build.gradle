@@ -75,6 +75,7 @@ spotless {
 	}
 }
 
+
 test {
 	useJUnitPlatform()
 }

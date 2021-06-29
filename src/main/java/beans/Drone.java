@@ -26,7 +26,7 @@ public class Drone implements Comparable<Drone> {
   @JsonIgnore private boolean safe = true;
   @JsonIgnore private boolean election = false;
   @JsonIgnore private final Queue buffer = new Queue();
-  @JsonIgnore private final MqttClient client = null;
+  @JsonIgnore private MqttClient client = null;
 
   public Drone() {}
 
@@ -135,11 +135,19 @@ public class Drone implements Comparable<Drone> {
     this.election = election;
   }
 
+  public boolean getElection() {
+    return election;
+  }
+
   public MqttClient connect() throws MqttException {
-    MqttClient client = new MqttClient("tcp://localhost:1883", MqttClient.generateClientId());
+    this.client = new MqttClient("tcp://localhost:1883", MqttClient.generateClientId());
     MqttConnectOptions connOpts = new MqttConnectOptions();
     connOpts.setCleanSession(true);
-    client.connect(connOpts);
+    this.client.connect(connOpts);
+    return this.client;
+  }
+
+  public MqttClient getClient() {
     return client;
   }
 

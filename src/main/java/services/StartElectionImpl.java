@@ -10,12 +10,12 @@ import io.grpc.stub.StreamObserver;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
-import process.DroneProcess;
+import process.MainProcess;
 
 public class StartElectionImpl extends StartElectionImplBase {
   private final Drone drone;
   private final List<Drone> list;
-  private static final Logger LOGGER = Logger.getLogger(DroneProcess.class.getSimpleName());
+  private static final Logger LOGGER = Logger.getLogger(MainProcess.class.getSimpleName());
 
   public StartElectionImpl(Drone drone, List<Drone> list) {
     this.drone = drone;
@@ -32,8 +32,7 @@ public class StartElectionImpl extends StartElectionImplBase {
       if (tmp.getId() == drone.getId()) {
         LOGGER.info("SONO IL NUOVO MASTER");
         drone.setIdMaster(drone.getId());
-        Drone next = nextDrone(drone, list);
-        endElectionMessage(drone, next, list);
+        endElectionMessage(drone, list);
       } else if (tmp.compareTo(drone) > 0) {
         LOGGER.info("SONO PIU' PICCOLO");
         startElectionMessage(drone, tmp, list);
@@ -81,11 +80,9 @@ public class StartElectionImpl extends StartElectionImplBase {
                                 == Status.UNAVAILABLE.getCode()) {
                           startElectionMessage(drone, tmp, list);
                           channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-                          channel.shutdown();
-                        } else {
-                          t.printStackTrace();
                         }
                       } catch (Exception e) {
+                        channel.shutdownNow();
                         e.printStackTrace();
                       }
                     }
@@ -102,7 +99,8 @@ public class StartElectionImpl extends StartElectionImplBase {
             });
   }
 
-  private void endElectionMessage(Drone drone, Drone next, List<Drone> list) {
+  private void endElectionMessage(Drone drone, List<Drone> list) {
+    Drone next = nextDrone(drone, list);
 
     Context.current()
         .fork()
@@ -130,7 +128,7 @@ public class StartElectionImpl extends StartElectionImplBase {
                             && ((StatusRuntimeException) t).getStatus().getCode()
                                 == Status.UNAVAILABLE.getCode()) {
                           list.remove(next);
-                          endElectionMessage(drone, next, list);
+                          endElectionMessage(drone, list);
                           channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
                         }
                       } catch (Exception e) {

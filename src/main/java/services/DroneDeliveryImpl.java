@@ -16,7 +16,7 @@ import java.sql.Timestamp;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
-import process.DroneProcess;
+import process.MainProcess;
 import process.Queue;
 
 public class DroneDeliveryImpl extends DroneDeliveryImplBase {
@@ -24,7 +24,7 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
   private final List<Drone> list;
   private final Client client;
   private final Queue buffer;
-  private static final Logger LOGGER = Logger.getLogger(DroneProcess.class.getSimpleName());
+  private static final Logger LOGGER = Logger.getLogger(MainProcess.class.getSimpleName());
 
   public DroneDeliveryImpl(Drone drone, List<Drone> list, Client client, Queue buffer) {
     this.drone = drone;
@@ -46,7 +46,12 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
                 } else if (driverIsDead(request)) {
                   dronazon.Delivery delivery = updateDelivery(request);
                   buffer.push(delivery);
-                  getDriver(request).setAvailable(true);
+                  // potrebbe capitare che il driver muore, il messaggio continua a girare nella
+                  // rete,
+                  // il master inserisce nuovamente il messaggio in coda e setta il driver come
+                  // disponibile
+                  // ma non lo trova perchè morto.
+                  if (list.contains(getDriver(request))) getDriver(request).setAvailable(true);
                 } else {
                   forwardDelivery(request);
                 }
@@ -83,101 +88,121 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
 
   private void forwardDelivery(Delivery request) throws InterruptedException {
     drone.setSafe(false);
-    Drone next = nextDrone(drone, list);
 
-    final ManagedChannel channel =
-        ManagedChannelBuilder.forTarget(next.getAddress() + ":" + next.getPort())
-            .usePlaintext()
-            .build();
+    Context.current().fork().run(() -> {Drone next = nextDrone(drone, list);
 
-    DroneDeliveryStub stub = DroneDeliveryGrpc.newStub(channel);
+        final ManagedChannel channel =
+                ManagedChannelBuilder.forTarget(next.getAddress() + ":" + next.getPort())
+                        .usePlaintext()
+                        .build();
 
-    stub.delivery(
-        request,
-        new StreamObserver<Empty>() {
+        DroneDeliveryStub stub = DroneDeliveryGrpc.newStub(channel);
 
-          @Override
-          public void onNext(Empty response) {}
+        stub.delivery(
+                request,
+                new StreamObserver<Empty>() {
 
-          @Override
-          public void onError(Throwable t) {
-            try {
-              if (t instanceof StatusRuntimeException
-                  && ((StatusRuntimeException) t).getStatus().getCode()
-                      == Status.UNAVAILABLE.getCode()) {
-                list.remove(next);
-                forwardDelivery(request);
-              }
-              channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-              channel.shutdownNow();
-            }
-          }
+                    @Override
+                    public void onNext(Empty response) {}
 
-          @Override
-          public void onCompleted() {
-            drone.setSafe(true);
-            channel.shutdownNow();
-          }
-        });
+                    @Override
+                    public void onError(Throwable t) {
+                        try {
+                            if (t instanceof StatusRuntimeException
+                                    && ((StatusRuntimeException) t).getStatus().getCode()
+                                    == Status.UNAVAILABLE.getCode()) {
+                                list.remove(next);
+                                forwardDelivery(request);
+                            }
+                            channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                        } catch (InterruptedException e) {
+                            channel.shutdownNow();
+                        }
+                    }
+
+                    @Override
+                    public void onCompleted() {
+                        drone.setSafe(true);
+                        try {
+                            channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                        } catch (InterruptedException e) {
+                            channel.shutdownNow();
+                            e.printStackTrace();
+                        }
+                    }
+                });});
+
   }
 
-  private void makeDelivery(Delivery request) throws InterruptedException {
+  private void makeDelivery(Delivery request){
     drone.setSafe(false);
-    Drone master = getMaster();
+    Context.current()
+        .fork()
+        .run(
+            () -> {
+              Drone master = getMaster();
 
-    Thread.sleep(5000);
+              try {
+                Thread.sleep(5000);
+              } catch (InterruptedException e) {
+                e.printStackTrace();
+              }
 
-    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
-    updateDroneInfo(request, timestamp);
+              Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+              updateDroneInfo(request, timestamp);
 
-    assert master != null;
+              assert master != null;
 
-    final ManagedChannel channel =
-        ManagedChannelBuilder.forTarget(master.getAddress() + ":" + master.getPort())
-            .usePlaintext()
-            .build();
+              final ManagedChannel channel =
+                  ManagedChannelBuilder.forTarget(master.getAddress() + ":" + master.getPort())
+                      .usePlaintext()
+                      .build();
 
-    InfoUpdatedStub stub = InfoUpdatedGrpc.newStub(channel);
+              InfoUpdatedStub stub = InfoUpdatedGrpc.newStub(channel);
 
-    DroneInfo info =
-        DroneInfo.newBuilder()
-            .setId(drone.getId())
-            .setTimestamp(drone.getTimestamp())
-            .setKm(drone.getTot_km())
-            .setBattery(drone.getBattery())
-            .setX(request.getEndX())
-            .setY(request.getEndY())
-            .setTotDelivery(drone.getTot_delivery())
-            .build();
+              DroneInfo info =
+                  DroneInfo.newBuilder()
+                      .setId(drone.getId())
+                      .setTimestamp(drone.getTimestamp())
+                      .setKm(drone.getTot_km())
+                      .setBattery(drone.getBattery())
+                      .setX(request.getEndX())
+                      .setY(request.getEndY())
+                      .setTotDelivery(drone.getTot_delivery())
+                      .build();
 
-    stub.message(
-        info,
-        new StreamObserver<Empty>() {
-          @Override
-          public void onNext(Empty value) {}
+              stub.message(
+                  info,
+                  new StreamObserver<Empty>() {
+                    @Override
+                    public void onNext(Empty value) {}
 
-          @Override
-          public void onError(Throwable t) {
-            // TODO caso in cui master dovesse fallire...
-            try {
-              channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-              channel.shutdownNow();
-            }
-          }
+                    @Override
+                    public void onError(Throwable t) {
+                      // TODO caso in cui master dovesse fallire...
+                      try {
+                        channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                      } catch (InterruptedException e) {
+                        channel.shutdownNow();
+                      }
+                    }
 
-          @Override
-          public void onCompleted() {
-            drone.setSafe(true);
-            if (drone.getBattery() < 15 && drone.getId() != drone.getIdMaster()) {
-              removeFromServerList();
-              channel.shutdownNow();
-              System.exit(0);
-            }
-            channel.shutdownNow();
-          }
-        });
+                    @Override
+                    public void onCompleted() {
+                      drone.setSafe(true);
+                      try {
+                        if (drone.getBattery() < 15) {
+                          removeFromServerList();
+                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                            channel.shutdownNow();
+                          System.exit(0);
+                        }
+                      } catch (InterruptedException e) {
+                        e.printStackTrace();
+                      }
+                    }
+                  });
+            });
   }
 
   private void removeFromServerList() {
