@@ -41,25 +41,21 @@ public class EndElectionImpl extends EndElectionImplBase {
       drone.setAvailable(true);
       drone.setElection(true);
       forwardElectionMessage(drone, list);
-      responseObserver.onNext(Empty.newBuilder().build());
-      responseObserver.onCompleted();
     } else if (drone.getId() != drone.getIdMaster()) {
       drone.setIdMaster(request.getMaster());
       forwardElectionMessage(drone, list);
-      responseObserver.onNext(Empty.newBuilder().build());
-      responseObserver.onCompleted();
     } else {
       try {
         drone.setElection(false);
         updateNewMasterInList();
         takeDelivery(drone.getBuffer(), drone.connect());
         startDelivery(list, drone.getBuffer());
-        responseObserver.onNext(Empty.newBuilder().build());
-        responseObserver.onCompleted();
       } catch (MqttException e) {
         e.printStackTrace();
       }
     }
+    responseObserver.onNext(Empty.newBuilder().build());
+    responseObserver.onCompleted();
   }
 
   private void updateNewMasterInList() {
@@ -124,7 +120,6 @@ public class EndElectionImpl extends EndElectionImplBase {
                         channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
                       } catch (InterruptedException e) {
                         channel.shutdownNow();
-                        e.printStackTrace();
                       }
                     }
                   });
@@ -169,7 +164,6 @@ public class EndElectionImpl extends EndElectionImplBase {
                           channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
                         }
                       } catch (Exception e) {
-                        e.printStackTrace();
                         channel.shutdownNow();
                       }
                     }

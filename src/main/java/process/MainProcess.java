@@ -290,6 +290,7 @@ public class MainProcess {
         .fork()
         .run(
             () -> {
+              assert next != null;
               final ManagedChannel channel =
                   ManagedChannelBuilder.forTarget(next.getAddress() + ":" + next.getPort())
                       .usePlaintext()
@@ -314,11 +315,17 @@ public class MainProcess {
                         try {
                           list.remove(next);
                           searchMasterInList(drone, list);
-                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
                         } catch (InterruptedException e) {
-                          channel.shutdownNow();
+                          e.printStackTrace();
                         }
-                      } else t.printStackTrace();
+                      } else {
+                        t.printStackTrace();
+                      }
+                      try {
+                        channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                      } catch (InterruptedException e) {
+                        channel.shutdownNow();
+                      }
                     }
 
                     public void onCompleted() {
@@ -373,15 +380,11 @@ public class MainProcess {
                       public void onNext(Empty response) {}
 
                       public void onError(Throwable t) {
-                        if (t instanceof StatusRuntimeException
-                            && ((StatusRuntimeException) t).getStatus().getCode()
-                                == Status.UNAVAILABLE.getCode()) {
-                          try {
-                            channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-                          } catch (InterruptedException e) {
-                            channel.shutdownNow();
-                          }
-                        } else t.printStackTrace();
+                        try {
+                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                        } catch (InterruptedException e) {
+                          channel.shutdownNow();
+                        }
                       }
 
                       public void onCompleted() {
@@ -532,28 +535,28 @@ public class MainProcess {
                             } else {
                               checkDroneLife(drone, list);
                             }
-                            channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
                           } catch (InterruptedException e) {
-                            channel.shutdownNow();
                             e.printStackTrace();
                           }
                         } else {
-                          try {
-                            channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-                          } catch (InterruptedException e) {
-                            channel.shutdownNow();
-                            e.printStackTrace();
-                          }
                           t.printStackTrace();
+                        }
+                        try {
+                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                        } catch (InterruptedException e) {
+                          channel.shutdownNow();
                         }
                       }
 
                       @Override
                       public void onCompleted() {
-                        channel.shutdown();
+                        try {
+                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                        } catch (InterruptedException e) {
+                          channel.shutdownNow();
+                        }
                       }
                     });
-                channel.awaitTermination(1, TimeUnit.SECONDS);
               } catch (Exception e) {
                 e.printStackTrace();
               }
@@ -563,10 +566,7 @@ public class MainProcess {
   private void startElectionMessage(Drone drone, List<Drone> list) throws InterruptedException {
     Drone next = nextDrone(drone, list);
 
-    Context.current()
-        .fork()
-        .run(
-            () -> {
+
               final ManagedChannel channel =
                   ManagedChannelBuilder.forTarget(next.getAddress() + ":" + next.getPort())
                       .usePlaintext()
@@ -585,16 +585,20 @@ public class MainProcess {
 
                     @Override
                     public void onError(Throwable t) {
-                      try {
-                        if (t instanceof StatusRuntimeException
-                            && ((StatusRuntimeException) t).getStatus().getCode()
-                                == Status.UNAVAILABLE.getCode()) {
+
+                      if (t instanceof StatusRuntimeException
+                          && ((StatusRuntimeException) t).getStatus().getCode()
+                              == Status.UNAVAILABLE.getCode()) {
+                        try {
                           startElectionMessage(drone, list);
-                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                        } catch (InterruptedException e) {
+                          e.printStackTrace();
                         }
-                      } catch (Exception e) {
-                        channel.shutdown();
-                        e.printStackTrace();
+                      }
+                      try {
+                        channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                      } catch (InterruptedException e) {
+                        channel.shutdownNow();
                       }
                     }
 
@@ -609,7 +613,7 @@ public class MainProcess {
                     }
                   });
               channel.shutdown();
-            });
+
   }
 
   private Drone defineDroneOfDelivery(List<Drone> list, Point start) {
