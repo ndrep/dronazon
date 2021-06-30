@@ -44,7 +44,8 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
                 if (isDriver(request.getIdDriver(), drone.getId())) {
                   makeDelivery(request);
                 } else if (driverIsDead(request)) {
-                    list.remove(getDriver(request));
+                  LOGGER.info("IL DRONE " + request.getIdDriver() + "DEVE ESSERE ELIMINATO");
+                  list.remove(getDriver(request));
                   dronazon.Delivery delivery = updateDelivery(request);
                   buffer.push(delivery);
                   // potrebbe capitare che il driver muore, il messaggio continua a girare nella
@@ -52,7 +53,7 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
                   // il master inserisce nuovamente il messaggio in coda e setta il driver come
                   // disponibile
                   // ma non lo trova perchè morto.
-                  //if (list.contains(getDriver(request))) getDriver(request).setAvailable(true);
+                  // if (list.contains(getDriver(request))) getDriver(request).setAvailable(true);
                 } else {
                   forwardDelivery(request);
                 }
@@ -60,8 +61,8 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
                 e.printStackTrace();
               }
             });
-      responseObserver.onNext(Empty.newBuilder().build());
-      responseObserver.onCompleted();
+    responseObserver.onNext(Empty.newBuilder().build());
+    responseObserver.onCompleted();
     drone.setSafe(true);
   }
 
@@ -201,6 +202,17 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
                       try {
                         if (drone.getBattery() < 15) {
                           removeFromServerList();
+
+                          synchronized (drone) {
+                            if (!drone.getSafe()) {
+                              try {
+                                drone.wait();
+                              } catch (InterruptedException e) {
+                                e.printStackTrace();
+                              }
+                            }
+                          }
+
                           channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
                           channel.shutdownNow();
                           System.exit(0);
@@ -211,7 +223,7 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
                       try {
                         channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
                       } catch (InterruptedException e) {
-                          channel.shutdownNow();
+                        channel.shutdownNow();
                       }
                     }
                   });
