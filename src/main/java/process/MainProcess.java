@@ -31,6 +31,8 @@ import java.util.stream.Collectors;
 import org.codehaus.jackson.jaxrs.JacksonJsonProvider;
 import org.eclipse.paho.client.mqttv3.*;
 import services.*;
+import simulator.Measurement;
+import simulator.PM10Simulator;
 
 public class MainProcess {
 
@@ -76,12 +78,18 @@ public class MainProcess {
         dp.searchMasterInList(drone, list);
         dp.greeting(drone, list);
       }
+      dp.sensorStart();
       dp.printInfo(drone, list);
       dp.quit(drone, client, mqtt, list);
 
     } catch (IOException | InterruptedException e) {
       e.printStackTrace();
     }
+  }
+
+  private void sensorStart(){
+    PM10Buffer pm10Buffer = new PM10Buffer(pm10 -> drone.getBufferPM10().add(pm10.readAllAndClean().stream().map(Measurement::getValue).reduce(0.0,Double::sum)/8.0));
+    new PM10Simulator(pm10Buffer).start();
   }
 
   private void startDelivery(List<Drone> list, Queue buffer, Client client) {
@@ -225,6 +233,7 @@ public class MainProcess {
     builder.append("TIMESTAMP: ").append(drone.getTimestamp()).append("\n");
     builder.append("BATTERY: ").append(drone.getBattery()).append("\n");
     builder.append("POSITION: ").append(drone.printPoint()).append("\n");
+    builder.append("SENSOR: ").append(drone.getBufferPM10()).append("\n");
     builder.append("LIST: ").append("[\n");
     for (Drone t : list) {
       builder.append(t.toString()).append(" \n");

@@ -1,6 +1,8 @@
 package beans;
 
 import java.awt.*;
+import java.util.ArrayList;
+import java.util.List;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlRootElement;
@@ -9,6 +11,7 @@ import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import process.Queue;
+import simulator.Measurement;
 
 @XmlRootElement
 @XmlAccessorType(XmlAccessType.FIELD)
@@ -27,6 +30,7 @@ public class Drone implements Comparable<Drone> {
   @JsonIgnore private boolean election = false;
   @JsonIgnore private final Queue buffer = new Queue();
   @JsonIgnore private MqttClient client = null;
+  @JsonIgnore private List<Double> bufferPM10 = new ArrayList<>();
 
   public Drone() {}
 
@@ -137,6 +141,14 @@ public class Drone implements Comparable<Drone> {
 
   public boolean getElection() {
     return election;
+  }
+
+  public List<Double> getBufferPM10() {
+    return bufferPM10;
+  }
+
+  public void setBufferPM10(List<Double> bufferPM10) {
+    this.bufferPM10 = bufferPM10;
   }
 
   public MqttClient connect() throws MqttException {
