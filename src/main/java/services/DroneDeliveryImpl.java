@@ -178,6 +178,7 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
                       .setX(request.getEndX())
                       .setY(request.getEndY())
                       .setTotDelivery(drone.getTot_delivery())
+                      .addAllPm10(drone.getBufferPM10())
                       .build();
 
               stub.message(

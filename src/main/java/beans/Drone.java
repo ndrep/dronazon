@@ -11,7 +11,6 @@ import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import process.Queue;
-import simulator.Measurement;
 
 @XmlRootElement
 @XmlAccessorType(XmlAccessType.FIELD)
@@ -52,16 +51,8 @@ public class Drone implements Comparable<Drone> {
     return port;
   }
 
-  public void setPort(int port) {
-    this.port = port;
-  }
-
   public String getAddress() {
     return address;
-  }
-
-  public void setAddress(String address) {
-    this.address = address;
   }
 
   public int getBattery() {

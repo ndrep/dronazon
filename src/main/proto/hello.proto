@@ -32,6 +32,7 @@ message DroneInfo {
   string timestamp = 5;
   double km = 6;
   int32 tot_delivery = 7;
+  repeated double pm10 = 8;
 }
 
 message Election {

@@ -1,6 +1,7 @@
 package process;
 
 import beans.Drone;
+import beans.Statistics;
 import com.example.grpc.*;
 import com.example.grpc.CheckDroneGrpc;
 import com.example.grpc.CheckDroneGrpc.CheckDroneStub;
@@ -23,6 +24,7 @@ import io.grpc.*;
 import io.grpc.stub.StreamObserver;
 import java.awt.Point;
 import java.io.IOException;
+import java.sql.Timestamp;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -79,16 +81,25 @@ public class MainProcess {
         dp.greeting(drone, list);
       }
       dp.sensorStart();
-      dp.printInfo(drone, list);
-      dp.quit(drone, client, mqtt, list);
+      dp.printInfo(drone, list, client);
+      dp.cleanBeforeQuit(drone, client, mqtt, list);
 
     } catch (IOException | InterruptedException e) {
       e.printStackTrace();
     }
   }
 
-  private void sensorStart(){
-    PM10Buffer pm10Buffer = new PM10Buffer(pm10 -> drone.getBufferPM10().add(pm10.readAllAndClean().stream().map(Measurement::getValue).reduce(0.0,Double::sum)/8.0));
+  private void sensorStart() {
+    PM10Buffer pm10Buffer =
+        new PM10Buffer(
+            pm10 ->
+                drone
+                    .getBufferPM10()
+                    .add(
+                        pm10.readAllAndClean().stream()
+                                .map(Measurement::getValue)
+                                .reduce(0.0, Double::sum)
+                            / 8.0));
     new PM10Simulator(pm10Buffer).start();
   }
 
@@ -99,7 +110,7 @@ public class MainProcess {
                 try {
                   Delivery delivery = buffer.pop();
                   if (drone.getBattery() < 15 || list.size() == 0) {
-                    quit(list, buffer, client, delivery);
+                    cleanBeforeQuit(list, buffer, client, delivery);
                   }
                   if (available(list)) {
                     Drone driver = defineDroneOfDelivery(list, delivery.getStart());
@@ -120,7 +131,7 @@ public class MainProcess {
         .start();
   }
 
-  private void quit(List<Drone> list, Queue buffer, Client client, Delivery delivery)
+  private void cleanBeforeQuit(List<Drone> list, Queue buffer, Client client, Delivery delivery)
       throws MqttException, InterruptedException {
     drone.getClient().disconnect();
     while (buffer.size() > 0) {
@@ -150,7 +161,7 @@ public class MainProcess {
     return list.stream().anyMatch(Drone::getAvailable);
   }
 
-  private void quit(Drone drone, Client client, MqttClient mqttClient, List<Drone> list)
+  private void cleanBeforeQuit(Drone drone, Client client, MqttClient mqttClient, List<Drone> list)
       throws InterruptedException {
 
     new Thread(
@@ -207,7 +218,7 @@ public class MainProcess {
     }
   }
 
-  private void printInfo(Drone drone, List<Drone> list) {
+  private void printInfo(Drone drone, List<Drone> list, Client client) {
     new Thread(
             () -> {
               while (true) {
@@ -215,6 +226,50 @@ public class MainProcess {
                   checkDroneLife(drone, list);
                   Thread.sleep(10000);
                   buildMessage(drone, list);
+                  if (drone.getId() == drone.getIdMaster()) {
+                    WebResource webResource =
+                        client.resource("http://localhost:6789" + "/api/statistics");
+
+                    double delivery =
+                        (double)
+                                list.stream()
+                                    .filter(d -> !d.getTimestamp().equals("NONE"))
+                                    .map(Drone::getTot_delivery)
+                                    .reduce(0, Integer::sum)
+                            / list.size();
+                    double km =
+                        list.stream()
+                                .filter(d -> !d.getTimestamp().equals("NONE"))
+                                .map(Drone::getTot_km)
+                                .reduce(0.0, Double::sum)
+                            / list.size();
+                    double pm10 =
+                        list.stream()
+                                .filter(d -> !d.getTimestamp().equals("NONE"))
+                                .map(
+                                    drone1 ->
+                                        drone1.getBufferPM10().stream().reduce(0.0, Double::sum)
+                                            / drone1.getBufferPM10().size())
+                                .reduce(0.0, Double::sum)
+                            / list.size();
+                    double battery =
+                        (double)
+                                list.stream()
+                                    .filter(d -> !d.getTimestamp().equals("NONE"))
+                                    .map(Drone::getBattery)
+                                    .reduce(0, Integer::sum)
+                            / list.size();
+                    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+                    Statistics statistics =
+                        new Statistics(
+                            delivery,
+                            km,
+                            pm10,
+                            battery,
+                            timestamp.toString());
+
+                    webResource.type("application/json").post(ClientResponse.class, statistics);
+                  }
 
                 } catch (InterruptedException e) {
                   e.printStackTrace();
@@ -350,9 +405,6 @@ public class MainProcess {
   }
 
   private Drone nextDrone(Drone drone, List<Drone> list) {
-    if (list.isEmpty()) {
-      return null;
-    }
     int index = list.indexOf(searchDroneInList(drone, list));
     return list.get((index + 1) % list.size());
   }

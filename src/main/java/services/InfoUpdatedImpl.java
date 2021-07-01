@@ -43,6 +43,7 @@ public class InfoUpdatedImpl extends InfoUpdatedImplBase {
       updated.setTot_km(request.getKm());
       updated.setTot_delivery(request.getTotDelivery());
       updated.setTimestamp(request.getTimestamp());
+      updated.setBufferPM10(request.getPm10List());
     }
   }
 
