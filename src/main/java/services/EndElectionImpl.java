@@ -11,8 +11,6 @@ import com.example.grpc.InfoUpdatedGrpc.*;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.sun.jersey.api.client.Client;
-import com.sun.jersey.api.client.ClientResponse;
-import com.sun.jersey.api.client.WebResource;
 import dronazon.Delivery;
 import io.grpc.*;
 import io.grpc.stub.StreamObserver;
@@ -23,7 +21,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-
 import org.eclipse.paho.client.mqttv3.*;
 import process.Queue;
 
@@ -53,8 +50,11 @@ public class EndElectionImpl extends EndElectionImplBase {
         drone.setElection(false);
         updateNewMasterInList();
         takeDelivery(drone.getBuffer(), drone.connect());
-        //TODO AGGIUNTA
-        list = list.stream().filter(d -> !(!d.getAvailable() && d.getBattery()==100)).collect(Collectors.toList());
+        // TODO AGGIUNTA
+        list =
+            list.stream()
+                .filter(d -> !(!d.getAvailable() && d.getBattery() == 100))
+                .collect(Collectors.toList());
         startDelivery(list, drone.getBuffer());
       } catch (MqttException e) {
         e.printStackTrace();
@@ -229,13 +229,13 @@ public class EndElectionImpl extends EndElectionImplBase {
   }
 
   private Drone defineDroneOfDelivery(List<Drone> list, Point start) {
-      List<Drone> tmp = new ArrayList<>(list);
-      tmp.sort(Comparator.comparing(Drone::getBattery).thenComparing(Drone::getId));
-      tmp.sort(Collections.reverseOrder());
-      return tmp.stream()
-              .filter(Drone::getAvailable)
-              .min(Comparator.comparing(d -> d.getPoint().distance(start)))
-              .orElse(null);
+    List<Drone> tmp = new ArrayList<>(list);
+    tmp.sort(Comparator.comparing(Drone::getBattery).thenComparing(Drone::getId));
+    tmp.sort(Collections.reverseOrder());
+    return tmp.stream()
+        .filter(Drone::getAvailable)
+        .min(Comparator.comparing(d -> d.getPoint().distance(start)))
+        .orElse(null);
   }
 
   private void takeDelivery(Queue buffer, MqttClient client) {

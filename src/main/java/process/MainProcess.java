@@ -30,8 +30,6 @@ import java.util.stream.Collectors;
 import org.codehaus.jackson.jaxrs.JacksonJsonProvider;
 import org.eclipse.paho.client.mqttv3.*;
 import services.*;
-import simulator.Measurement;
-import simulator.PM10Simulator;
 
 public class MainProcess {
 
@@ -77,27 +75,16 @@ public class MainProcess {
         dp.searchMasterInList(dp.drone, dp.list);
         dp.greeting(dp.drone, dp.list);
       }
-      dp.sensorStart();
+
+      PM10SensorThread pm10 = new PM10SensorThread(dp.drone);
+      pm10.start();
+
       dp.printInfo(dp.drone, dp.list, client);
       dp.quit(dp.drone, client, mqtt, dp.list);
 
     } catch (IOException | InterruptedException e) {
       e.printStackTrace();
     }
-  }
-
-  private void sensorStart() {
-    PM10Buffer pm10Buffer =
-        new PM10Buffer(
-            pm10 ->
-                drone
-                    .getBufferPM10()
-                    .add(
-                        pm10.readAllAndClean().stream()
-                                .map(Measurement::getValue)
-                                .reduce(0.0, Double::sum)
-                            / 8.0));
-    new PM10Simulator(pm10Buffer).start();
   }
 
   private void startDelivery(List<Drone> list, Queue buffer, Client client) {
@@ -215,12 +202,7 @@ public class MainProcess {
                             / list.size();
                     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
                     Statistics statistics =
-                        new Statistics(
-                            delivery,
-                            km,
-                            pm10,
-                            battery,
-                            timestamp.toString());
+                        new Statistics(delivery, km, pm10, battery, timestamp.toString());
 
                     webResource.type("application/json").post(ClientResponse.class, statistics);
                   }
@@ -382,6 +364,11 @@ public class MainProcess {
                       public void onNext(Empty response) {}
 
                       public void onError(Throwable t) {
+                        if (t instanceof StatusRuntimeException
+                            && ((StatusRuntimeException) t).getStatus().getCode()
+                                == Status.UNAVAILABLE.getCode()) {
+                          list.remove(d);
+                        } else t.printStackTrace();
                         try {
                           channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
                         } catch (InterruptedException e) {
@@ -473,11 +460,15 @@ public class MainProcess {
                     new StreamObserver<Empty>() {
                       public void onNext(Empty response) {}
 
-                      public void onError(Throwable throwable) {
+                      public void onError(Throwable t) {
                         try {
-                          list.remove(next);
-                          sendDelivery(delivery, driver, list);
-                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                          if (t instanceof StatusRuntimeException
+                              && ((StatusRuntimeException) t).getStatus().getCode()
+                                  == Status.UNAVAILABLE.getCode()) {
+                            list.remove(next);
+                            sendDelivery(delivery, driver, list);
+                            channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                          } else t.printStackTrace();
                         } catch (InterruptedException e) {
                           channel.shutdownNow();
                         }
@@ -498,5 +489,4 @@ public class MainProcess {
               }
             });
   }
-
 }

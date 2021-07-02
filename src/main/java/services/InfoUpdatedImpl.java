@@ -6,14 +6,17 @@ import com.example.grpc.InfoUpdatedGrpc.InfoUpdatedImplBase;
 import io.grpc.stub.StreamObserver;
 import java.awt.*;
 import java.util.List;
+import process.RingController;
 
 public class InfoUpdatedImpl extends InfoUpdatedImplBase {
   private final List<Drone> list;
   private final Drone drone;
+  private RingController manager;
 
   public InfoUpdatedImpl(Drone drone, List<Drone> list) {
     this.list = list;
     this.drone = drone;
+    manager = new RingController(list, drone);
   }
 
   @Override
@@ -24,30 +27,13 @@ public class InfoUpdatedImpl extends InfoUpdatedImplBase {
   }
 
   private void updateDroneInfoInList(DroneInfo request) {
-    Drone updated = searchDroneInList(request.getId(), list);
+    Drone updated = manager.searchDroneById(request.getId(), list);
     if (request.getBattery() < 15) {
       synchronized (list) {
         list.remove(updated);
       }
     } else {
-      updateDroneInfoInList(request, updated);
+      manager.updateDroneInfoInList(request, updated);
     }
-  }
-
-  private void updateDroneInfoInList(DroneInfo request, Drone updated) {
-    synchronized (list) {
-      updated.setAvailable(true);
-      updated.setElection(false);
-      updated.setBattery(request.getBattery());
-      updated.setPoint(new Point(request.getX(), request.getY()));
-      updated.setTot_km(request.getKm());
-      updated.setTot_delivery(request.getTotDelivery());
-      updated.setTimestamp(request.getTimestamp());
-      updated.setBufferPM10(request.getPm10List());
-    }
-  }
-
-  private Drone searchDroneInList(int id, List<Drone> list) {
-    return list.stream().filter(d -> d.getId() == id).findFirst().orElse(null);
   }
 }
