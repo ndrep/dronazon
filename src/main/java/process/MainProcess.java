@@ -38,12 +38,14 @@ public class MainProcess {
   private final Drone drone;
   private List<Drone> list;
   private final RingController manager;
+  private final DeliveryController controller;
   private static final Logger LOGGER = Logger.getLogger(MainProcess.class.getSimpleName());
 
   public MainProcess(Drone drone) {
     this.drone = drone;
     list = new ArrayList<>();
     manager = new RingController(list, drone);
+    controller = new DeliveryController(list, drone);
   }
 
   public static void main(String[] args) throws MqttException {
@@ -71,7 +73,7 @@ public class MainProcess {
     try {
       dp.startAllGrpcServices(dp.drone, dp.list, client, dp.drone.getBuffer());
       if (dp.manager.isMaster(dp.drone.getIdMaster(), dp.drone.getId())) {
-        dp.takeDelivery(dp.drone.getBuffer(), mqtt);
+        dp.controller.takeDelivery(dp.drone.getBuffer(), mqtt);
         dp.startDelivery(dp.list, dp.drone.getBuffer(), client);
       } else {
         dp.searchMasterInList(dp.drone, dp.list);
@@ -109,7 +111,7 @@ public class MainProcess {
                   if (manager.available(list)) {
                     Drone driver = manager.defineDroneOfDelivery(list, delivery.getStart());
                     driver.setAvailable(false);
-                    sendDelivery(delivery, driver, list);
+                    controller.sendDelivery(delivery, driver, list);
                   } else {
                     buffer.push(delivery);
                   }
@@ -145,7 +147,7 @@ public class MainProcess {
                     if (manager.available(list)) {
                       Drone driver = manager.defineDroneOfDelivery(list, delivery.getStart());
                       driver.setAvailable(false);
-                      sendDelivery(delivery, driver, list);
+                      controller.sendDelivery(delivery, driver, list);
                     } else {
                       buffer.push(delivery);
                     }
@@ -408,95 +410,4 @@ public class MainProcess {
     clientConfig.getClasses().add(JacksonJsonProvider.class);
     return clientConfig;
   }
-
-  private void takeDelivery(Queue buffer, MqttClient client) {
-    try {
-      String topic = "dronazon/smartcity/orders";
-      int qos = 0;
-
-      client.setCallback(
-          new MqttCallback() {
-
-            public void messageArrived(String topic, MqttMessage message) {
-              String receivedMessage = new String(message.getPayload());
-              Gson gson = new GsonBuilder().create();
-
-              Delivery delivery = gson.fromJson(receivedMessage, Delivery.class);
-              buffer.push(delivery);
-            }
-
-            public void connectionLost(Throwable cause) {
-              cause.printStackTrace();
-            }
-
-            public void deliveryComplete(IMqttDeliveryToken token) {}
-          });
-
-      client.subscribe(topic, qos);
-
-    } catch (MqttException me) {
-      me.printStackTrace();
-    }
-  }
-
-  private void sendDelivery(Delivery delivery, Drone driver, List<Drone> list)
-      throws InterruptedException {
-    drone.setSafe(false);
-    Drone next = manager.nextDrone(drone, list);
-
-    Context.current()
-        .fork()
-        .run(
-            () -> {
-              try {
-                final ManagedChannel channel =
-                    ManagedChannelBuilder.forTarget(next.getAddress() + ":" + next.getPort())
-                        .usePlaintext()
-                        .build();
-
-                DroneDeliveryStub stub = DroneDeliveryGrpc.newStub(channel);
-                Point start = delivery.getStart();
-                Point end = delivery.getEnd();
-
-                Hello.Delivery request =
-                    Hello.Delivery.newBuilder()
-                        .setId(delivery.getId())
-                        .setStartX(start.x)
-                        .setStartY(start.y)
-                        .setEndX(end.x)
-                        .setEndY(end.y)
-                        .setIdDriver(driver.getId())
-                        .build();
-
-                stub.delivery(
-                    request,
-                    new StreamObserver<Empty>() {
-                      public void onNext(Empty response) {}
-
-                      public void onError(Throwable throwable) {
-                        try {
-                          list.remove(next);
-                          sendDelivery(delivery, driver, list);
-                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-                        } catch (InterruptedException e) {
-                          channel.shutdownNow();
-                        }
-                      }
-
-                      public void onCompleted() {
-                        drone.setSafe(true);
-                        try {
-                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-                        } catch (InterruptedException e) {
-                          channel.shutdown();
-                          e.printStackTrace();
-                        }
-                      }
-                    });
-              } catch (Exception e) {
-                e.printStackTrace();
-              }
-            });
-  }
-
 }

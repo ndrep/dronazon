@@ -26,11 +26,28 @@ public class RingController {
     this.drone = drone;
   }
 
-  boolean available(List<Drone> list) {
-    return list.stream().anyMatch(Drone::getAvailable);
-  }
+    public Drone getMaster(Drone drone, List<Drone> list) {
+        return list.stream().filter(d -> d.getId() == drone.getIdMaster()).findFirst().orElse(null);
+    }
 
-    Drone defineDroneOfDelivery(List<Drone> list, Point start) {
+    public void updateNewMasterInList() {
+        Drone master = searchDroneInList(drone, list);
+        master.setElection(false);
+        master.setIdMaster(drone.getId());
+        master.setBattery(drone.getBattery());
+        master.setPoint(drone.getPoint());
+        master.setTot_km(drone.getTot_km());
+        master.setTot_delivery(drone.getTot_delivery());
+        master.setTimestamp(drone.getTimestamp());
+    }
+
+    public boolean available(List<Drone> list) {
+        synchronized (list) {
+            return list.stream().anyMatch(Drone::getAvailable);
+        }
+    }
+
+    public Drone defineDroneOfDelivery(List<Drone> list, Point start) {
         List<Drone> tmp = new ArrayList<>(list);
         tmp.sort(Comparator.comparing(Drone::getBattery).thenComparing(Drone::getId));
         tmp.sort(Collections.reverseOrder());
@@ -40,7 +57,7 @@ public class RingController {
                 .orElse(null);
     }
 
-  void removeFromServerList(Drone drone, Client client) {
+  public void removeFromServerList(Drone drone, Client client) {
     WebResource webResource = client.resource("http://localhost:6789" + "/api/remove");
     ClientResponse response =
             webResource.type("application/json").post(ClientResponse.class, drone.getId());
@@ -50,16 +67,16 @@ public class RingController {
     }
   }
 
-  Drone nextDrone(Drone drone, List<Drone> list) {
+  public Drone nextDrone(Drone drone, List<Drone> list) {
     int index = list.indexOf(searchDroneInList(drone, list));
     return list.get((index + 1) % list.size());
   }
 
-  boolean isMaster(int idMaster, int id) {
+  public boolean isMaster(int idMaster, int id) {
     return idMaster == id;
   }
 
-  void checkDroneLife(Drone drone, List<Drone> list) throws InterruptedException {
+  public void checkDroneLife(Drone drone, List<Drone> list) throws InterruptedException {
     Drone next = nextDrone(drone, list);
 
     Context.current()
@@ -119,7 +136,7 @@ public class RingController {
                     });
   }
 
-  private void startElectionMessage(Drone drone, List<Drone> list) throws InterruptedException {
+  public void startElectionMessage(Drone drone, List<Drone> list) throws InterruptedException {
     Drone next = nextDrone(drone, list);
 
     final ManagedChannel channel =
@@ -171,7 +188,7 @@ public class RingController {
   }
 
 
-  private Drone searchDroneInList(Drone drone, List<Drone> list) {
+  public Drone searchDroneInList(Drone drone, List<Drone> list) {
     return list.stream().filter(d -> d.getId() == drone.getId()).findFirst().orElse(null);
   }
 }

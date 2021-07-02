@@ -25,17 +25,24 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import org.eclipse.paho.client.mqttv3.*;
+import process.DeliveryController;
 import process.Queue;
+import process.RingController;
 
 public class EndElectionImpl extends EndElectionImplBase {
   private final Drone drone;
   private List<Drone> list;
   private final Client client;
+  private RingController manager;
+  private DeliveryController controller;
 
   public EndElectionImpl(Drone drone, List<Drone> list, Client client) {
     this.drone = drone;
     this.list = list;
     this.client = client;
+    manager = new RingController(list, drone);
+    controller = new DeliveryController(list, drone);
+
   }
 
   @Override
@@ -51,8 +58,8 @@ public class EndElectionImpl extends EndElectionImplBase {
     } else {
       try {
         drone.setElection(false);
-        updateNewMasterInList();
-        takeDelivery(drone.getBuffer(), drone.connect());
+        manager.updateNewMasterInList();
+        controller.takeDelivery(drone.getBuffer(), drone.connect());
         //TODO AGGIUNTA
         list = list.stream().filter(d -> !(!d.getAvailable() && d.getBattery()==100)).collect(Collectors.toList());
         startDelivery(list, drone.getBuffer());
@@ -64,19 +71,8 @@ public class EndElectionImpl extends EndElectionImplBase {
     responseObserver.onCompleted();
   }
 
-  private void updateNewMasterInList() {
-    Drone master = searchDroneInList(drone, list);
-    master.setElection(false);
-    master.setIdMaster(drone.getId());
-    master.setBattery(drone.getBattery());
-    master.setPoint(drone.getPoint());
-    master.setTot_km(drone.getTot_km());
-    master.setTot_delivery(drone.getTot_delivery());
-    master.setTimestamp(drone.getTimestamp());
-  }
-
   private void sendInfoToNewMaster(Drone drone, List<Drone> list) {
-    Drone master = getMaster(drone, list);
+    Drone master = manager.getMaster(drone, list);
     Context.current()
         .fork()
         .run(
@@ -132,12 +128,8 @@ public class EndElectionImpl extends EndElectionImplBase {
             });
   }
 
-  private Drone getMaster(Drone drone, List<Drone> list) {
-    return list.stream().filter(d -> d.getId() == drone.getIdMaster()).findFirst().orElse(null);
-  }
-
   private void forwardElectionMessage(Drone drone, List<Drone> list) {
-    Drone next = nextDrone(drone, list);
+    Drone next = manager.nextDrone(drone, list);
 
     Context.current()
         .fork()
@@ -188,14 +180,6 @@ public class EndElectionImpl extends EndElectionImplBase {
             });
   }
 
-  private Drone nextDrone(Drone drone, List<Drone> list) {
-    int index = list.indexOf(searchDroneInList(drone, list));
-    return list.get((index + 1) % list.size());
-  }
-
-  private Drone searchDroneInList(Drone drone, List<Drone> list) {
-    return list.stream().filter(d -> d.getId() == drone.getId()).findFirst().orElse(null);
-  }
 
   private void startDelivery(List<Drone> list, Queue buffer) {
     new Thread(
@@ -203,10 +187,10 @@ public class EndElectionImpl extends EndElectionImplBase {
               while (true) {
                 try {
                   Delivery delivery = buffer.pop();
-                  if (available(list)) {
-                    Drone driver = defineDroneOfDelivery(list, delivery.getStart());
+                  if (manager.available(list)) {
+                    Drone driver = manager.defineDroneOfDelivery(list, delivery.getStart());
                     driver.setAvailable(false);
-                    sendDelivery(delivery, driver, list);
+                    controller.sendDelivery(delivery, driver, list);
                   } else {
                     buffer.push(delivery);
                   }
@@ -220,118 +204,5 @@ public class EndElectionImpl extends EndElectionImplBase {
               }
             })
         .start();
-  }
-
-  private boolean available(List<Drone> list) {
-    synchronized (list) {
-      return list.stream().anyMatch(Drone::getAvailable);
-    }
-  }
-
-  private Drone defineDroneOfDelivery(List<Drone> list, Point start) {
-      List<Drone> tmp = new ArrayList<>(list);
-      tmp.sort(Comparator.comparing(Drone::getBattery).thenComparing(Drone::getId));
-      tmp.sort(Collections.reverseOrder());
-      return tmp.stream()
-              .filter(Drone::getAvailable)
-              .min(Comparator.comparing(d -> d.getPoint().distance(start)))
-              .orElse(null);
-  }
-
-  private void takeDelivery(Queue buffer, MqttClient client) {
-    try {
-      String topic = "dronazon/smartcity/orders";
-      int qos = 0;
-
-      client.setCallback(
-          new MqttCallback() {
-
-            public void messageArrived(String topic, MqttMessage message) {
-              String receivedMessage = new String(message.getPayload());
-              Gson gson = new GsonBuilder().create();
-
-              Delivery delivery = gson.fromJson(receivedMessage, Delivery.class);
-              buffer.push(delivery);
-            }
-
-            public void connectionLost(Throwable cause) {
-              cause.printStackTrace();
-            }
-
-            public void deliveryComplete(IMqttDeliveryToken token) {}
-          });
-
-      client.subscribe(topic, qos);
-
-    } catch (MqttException me) {
-      me.printStackTrace();
-    }
-  }
-
-  private void sendDelivery(Delivery delivery, Drone driver, List<Drone> list)
-      throws InterruptedException {
-    drone.setSafe(false);
-
-    Drone next = nextDrone(drone, list);
-
-    Context.current()
-        .fork()
-        .run(
-            () -> {
-              try {
-                final ManagedChannel channel =
-                    ManagedChannelBuilder.forTarget(next.getAddress() + ":" + next.getPort())
-                        .usePlaintext()
-                        .build();
-
-                DroneDeliveryGrpc.DroneDeliveryStub stub = DroneDeliveryGrpc.newStub(channel);
-                Point start = delivery.getStart();
-                Point end = delivery.getEnd();
-
-                Hello.Delivery request =
-                    Hello.Delivery.newBuilder()
-                        .setId(delivery.getId())
-                        .setStartX(start.x)
-                        .setStartY(start.y)
-                        .setEndX(end.x)
-                        .setEndY(end.y)
-                        .setIdDriver(driver.getId())
-                        .build();
-
-                stub.delivery(
-                    request,
-                    new StreamObserver<Empty>() {
-                      public void onNext(Empty response) {}
-
-                      public void onError(Throwable t) {
-                        try {
-                          if (t instanceof StatusRuntimeException
-                              && ((StatusRuntimeException) t).getStatus().getCode()
-                                  == Status.UNAVAILABLE.getCode()) {
-
-                            list.remove(next);
-
-                            sendDelivery(delivery, driver, list);
-                            channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-                          }
-                        } catch (InterruptedException e) {
-                          channel.shutdownNow();
-                        }
-                      }
-
-                      public void onCompleted() {
-                        drone.setSafe(true);
-                        try {
-                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-                        } catch (InterruptedException e) {
-                          channel.shutdownNow();
-                          e.printStackTrace();
-                        }
-                      }
-                    });
-              } catch (Exception e) {
-                e.printStackTrace();
-              }
-            });
   }
 }
