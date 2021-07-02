@@ -3,6 +3,7 @@ package services;
 import beans.Drone;
 import com.example.grpc.DroneDeliveryGrpc;
 import com.example.grpc.DroneDeliveryGrpc.*;
+import com.example.grpc.Hello;
 import com.example.grpc.Hello.*;
 import com.example.grpc.InfoUpdatedGrpc;
 import com.example.grpc.InfoUpdatedGrpc.*;
@@ -14,9 +15,14 @@ import io.grpc.stub.StreamObserver;
 import java.awt.*;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
+
+import org.eclipse.paho.client.mqttv3.MqttClient;
+import org.eclipse.paho.client.mqttv3.MqttException;
 import process.MainProcess;
 import process.Queue;
 
@@ -200,9 +206,8 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
 
                     @Override
                     public void onCompleted() {
-                      drone.setSafe(true);
                       try {
-                        if (drone.getBattery() < 15) {
+                        if (drone.getBattery() < 15 && drone.getIdMaster() != drone.getId()) {
                           removeFromServerList();
 
                           synchronized (drone) {
@@ -218,7 +223,12 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
                           channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
                           channel.shutdownNow();
                           System.exit(0);
+                        } else if (drone.getBattery() < 15 && drone.getIdMaster() == drone.getId()){
+                            quitMaster(drone.getClient());
+                            channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                            channel.shutdownNow();
                         }
+                          drone.setSafe(true);
                       } catch (InterruptedException e) {
                         e.printStackTrace();
                       }
@@ -231,6 +241,127 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
                   });
             });
   }
+
+    private void removeFromServerList(Drone drone, Client client) {
+        WebResource webResource = client.resource("http://localhost:6789" + "/api/remove");
+        ClientResponse response =
+                webResource.type("application/json").post(ClientResponse.class, drone.getId());
+
+        if (response.getStatus() != 200) {
+            throw new RuntimeException("Failed : HTTP error code : " + response.getStatus());
+        }
+    }
+
+    private boolean available(List<Drone> list) {
+        return list.stream().anyMatch(Drone::getAvailable);
+    }
+
+    private Drone defineDroneOfDelivery(List<Drone> list, Point start) {
+        List<Drone> tmp = new ArrayList<>(list);
+        tmp.sort(Comparator.comparing(Drone::getBattery).thenComparing(Drone::getId));
+        tmp.sort(Collections.reverseOrder());
+        return tmp.stream()
+                .filter(Drone::getAvailable)
+                .min(Comparator.comparing(d -> d.getPoint().distance(start)))
+                .orElse(null);
+    }
+
+    private void sendDelivery(dronazon.Delivery delivery, Drone driver, List<Drone> list)
+            throws InterruptedException {
+
+        drone.setSafe(false);
+        Drone next = nextDrone(drone, list);
+
+        Context.current()
+                .fork()
+                .run(
+                        () -> {
+                            try {
+                                final ManagedChannel channel =
+                                        ManagedChannelBuilder.forTarget(next.getAddress() + ":" + next.getPort())
+                                                .usePlaintext()
+                                                .build();
+
+                                DroneDeliveryStub stub = DroneDeliveryGrpc.newStub(channel);
+                                Point start = delivery.getStart();
+                                Point end = delivery.getEnd();
+
+                                Hello.Delivery request =
+                                        Hello.Delivery.newBuilder()
+                                                .setId(delivery.getId())
+                                                .setStartX(start.x)
+                                                .setStartY(start.y)
+                                                .setEndX(end.x)
+                                                .setEndY(end.y)
+                                                .setIdDriver(driver.getId())
+                                                .build();
+
+                                stub.delivery(
+                                        request,
+                                        new StreamObserver<Empty>() {
+                                            public void onNext(Empty response) {}
+
+                                            public void onError(Throwable throwable) {
+                                                try {
+                                                    list.remove(next);
+                                                    sendDelivery(delivery, driver, list);
+                                                    channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                                                } catch (InterruptedException e) {
+                                                    channel.shutdownNow();
+                                                }
+                                            }
+
+                                            public void onCompleted() {
+                                                drone.setSafe(true);
+                                                try {
+                                                    channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                                                } catch (InterruptedException e) {
+                                                    channel.shutdown();
+                                                    e.printStackTrace();
+                                                }
+                                            }
+                                        });
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                        });
+    }
+
+
+    public void quitMaster(MqttClient mqttClient){
+      try {
+          mqttClient.disconnect();
+          Queue buffer = drone.getBuffer();
+          while (buffer.size() > 0) {
+              dronazon.Delivery delivery = buffer.pop();
+              Thread.sleep(5000);
+              if (available(list)) {
+                  Drone driver = defineDroneOfDelivery(list, delivery.getStart());
+                  driver.setAvailable(false);
+                  sendDelivery(delivery, driver, list);
+              } else {
+                  buffer.push(delivery);
+              }
+          }
+
+      } catch (InterruptedException | MqttException e) {
+          e.printStackTrace();
+      }
+        removeFromServerList(drone, client);
+
+        synchronized (drone) {
+            if (!drone.getSafe()) {
+                try {
+                    drone.wait();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+        System.exit(0);
+    }
+
+
 
   private void removeFromServerList() {
     WebResource webResource = client.resource("http://localhost:6789" + "/api/remove");

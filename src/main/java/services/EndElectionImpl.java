@@ -203,9 +203,6 @@ public class EndElectionImpl extends EndElectionImplBase {
               while (true) {
                 try {
                   Delivery delivery = buffer.pop();
-                  if (list.isEmpty()) {
-                    quit(list, buffer, delivery);
-                  }
                   if (available(list)) {
                     Drone driver = defineDroneOfDelivery(list, delivery.getStart());
                     driver.setAvailable(false);
@@ -217,48 +214,12 @@ public class EndElectionImpl extends EndElectionImplBase {
                     list.get(0).setAvailable(true);
                   }
 
-                } catch (InterruptedException | MqttException e) {
+                } catch (InterruptedException e) {
                   e.printStackTrace();
                 }
               }
             })
         .start();
-  }
-
-  private void quit(List<Drone> list, Queue buffer, Delivery delivery)
-      throws MqttException, InterruptedException {
-    drone.getClient().disconnect();
-    while (buffer.size() > 0) {
-      Thread.sleep(5000);
-      if (available(list)) {
-        Drone driver = defineDroneOfDelivery(list, delivery.getStart());
-        driver.setAvailable(false);
-        sendDelivery(delivery, driver, list);
-      } else {
-        buffer.push(delivery);
-      }
-    }
-    removeFromServerList(drone, client);
-    synchronized (drone) {
-      if (!drone.getSafe()) {
-        try {
-          drone.wait();
-        } catch (InterruptedException e) {
-          e.printStackTrace();
-        }
-      }
-    }
-    System.exit(0);
-  }
-
-  private void removeFromServerList(Drone drone, Client client) {
-    WebResource webResource = client.resource("http://localhost:6789" + "/api/remove");
-    ClientResponse response =
-        webResource.type("application/json").post(ClientResponse.class, drone.getId());
-
-    if (response.getStatus() != 200) {
-      throw new RuntimeException("Failed : HTTP error code : " + response.getStatus());
-    }
   }
 
   private boolean available(List<Drone> list) {
