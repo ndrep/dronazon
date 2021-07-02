@@ -17,6 +17,7 @@ import dronazon.Delivery;
 import io.grpc.*;
 import io.grpc.stub.StreamObserver;
 import java.awt.*;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -267,12 +268,13 @@ public class EndElectionImpl extends EndElectionImplBase {
   }
 
   private Drone defineDroneOfDelivery(List<Drone> list, Point start) {
-    //list.sort(Comparator.comparing(Drone::getBattery).thenComparing(Drone::getId));
-    //list.sort(Collections.reverseOrder());
-    return list.stream()
-        .filter(Drone::getAvailable)
-        .min(Comparator.comparing(d -> d.getPoint().distance(start)))
-        .orElse(null);
+      List<Drone> tmp = new ArrayList<>(list);
+      tmp.sort(Comparator.comparing(Drone::getBattery).thenComparing(Drone::getId));
+      tmp.sort(Collections.reverseOrder());
+      return tmp.stream()
+              .filter(Drone::getAvailable)
+              .min(Comparator.comparing(d -> d.getPoint().distance(start)))
+              .orElse(null);
   }
 
   private void takeDelivery(Queue buffer, MqttClient client) {

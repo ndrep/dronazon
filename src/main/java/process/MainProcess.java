@@ -127,7 +127,7 @@ public class MainProcess {
             })
         .start();
   }
-  
+
   private boolean available(List<Drone> list) {
     return list.stream().anyMatch(Drone::getAvailable);
   }
@@ -157,8 +157,20 @@ public class MainProcess {
                       buffer.push(delivery);
                     }
                   }
+                  /*
+                  synchronized (list){
+                    if (!available(list)) {
+                      try {
+                        list.wait();
+                      } catch (InterruptedException e) {
+                        e.printStackTrace();
+                      }
+                    }
+                  }
 
-                } catch (MqttException | InterruptedException e) {
+                   */
+
+                } catch (InterruptedException | MqttException e) {
                   e.printStackTrace();
                 }
               }
@@ -642,9 +654,10 @@ public class MainProcess {
   }
 
   private Drone defineDroneOfDelivery(List<Drone> list, Point start) {
-    //list.sort(Comparator.comparing(Drone::getBattery).thenComparing(Drone::getId));
-    //list.sort(Collections.reverseOrder());
-    return list.stream()
+    List<Drone> tmp = new ArrayList<>(list);
+    tmp.sort(Comparator.comparing(Drone::getBattery).thenComparing(Drone::getId));
+    tmp.sort(Collections.reverseOrder());
+    return tmp.stream()
         .filter(Drone::getAvailable)
         .min(Comparator.comparing(d -> d.getPoint().distance(start)))
         .orElse(null);
