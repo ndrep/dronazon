@@ -13,6 +13,7 @@ import io.grpc.*;
 import io.grpc.stub.StreamObserver;
 import java.awt.*;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
@@ -44,7 +45,7 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
                 if (isDriver(request.getIdDriver(), drone.getId())) {
                   makeDelivery(request);
                 } else if (driverIsDead(request)) {
-                  LOGGER.info("IL DRONE " + request.getIdDriver() + "DEVE ESSERE ELIMINATO");
+                  LOGGER.info("IL DRONE " + request.getIdDriver() + " DEVE ESSERE ELIMINATO");
                   list.remove(getDriver(request));
                   dronazon.Delivery delivery = updateDelivery(request);
                   buffer.push(delivery);

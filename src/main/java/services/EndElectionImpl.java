@@ -21,12 +21,14 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
 import org.eclipse.paho.client.mqttv3.*;
 import process.Queue;
 
 public class EndElectionImpl extends EndElectionImplBase {
   private final Drone drone;
-  private final List<Drone> list;
+  private List<Drone> list;
   private final Client client;
 
   public EndElectionImpl(Drone drone, List<Drone> list, Client client) {
@@ -50,6 +52,8 @@ public class EndElectionImpl extends EndElectionImplBase {
         drone.setElection(false);
         updateNewMasterInList();
         takeDelivery(drone.getBuffer(), drone.connect());
+        //TODO AGGIUNTA
+        list = list.stream().filter(d -> !(!d.getAvailable() && d.getBattery()==100)).collect(Collectors.toList());
         startDelivery(list, drone.getBuffer());
       } catch (MqttException e) {
         e.printStackTrace();
@@ -263,8 +267,8 @@ public class EndElectionImpl extends EndElectionImplBase {
   }
 
   private Drone defineDroneOfDelivery(List<Drone> list, Point start) {
-    list.sort(Comparator.comparing(Drone::getBattery).thenComparing(Drone::getId));
-    list.sort(Collections.reverseOrder());
+    //list.sort(Comparator.comparing(Drone::getBattery).thenComparing(Drone::getId));
+    //list.sort(Collections.reverseOrder());
     return list.stream()
         .filter(Drone::getAvailable)
         .min(Comparator.comparing(d -> d.getPoint().distance(start)))

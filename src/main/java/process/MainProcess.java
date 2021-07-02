@@ -82,7 +82,7 @@ public class MainProcess {
       }
       dp.sensorStart();
       dp.printInfo(drone, list, client);
-      dp.cleanBeforeQuit(drone, client, mqtt, list);
+      dp.quit(drone, client, mqtt, list);
 
     } catch (IOException | InterruptedException e) {
       e.printStackTrace();
@@ -109,9 +109,6 @@ public class MainProcess {
               while (true) {
                 try {
                   Delivery delivery = buffer.pop();
-                  if (drone.getBattery() < 15 || list.size() == 0) {
-                    cleanBeforeQuit(list, buffer, client, delivery);
-                  }
                   if (available(list)) {
                     Drone driver = defineDroneOfDelivery(list, delivery.getStart());
                     driver.setAvailable(false);
@@ -123,45 +120,19 @@ public class MainProcess {
                     list.get(0).setAvailable(true);
                   }
 
-                } catch (InterruptedException | MqttException e) {
+                } catch (InterruptedException e) {
                   e.printStackTrace();
                 }
               }
             })
         .start();
   }
-
-  private void cleanBeforeQuit(List<Drone> list, Queue buffer, Client client, Delivery delivery)
-      throws MqttException, InterruptedException {
-    drone.getClient().disconnect();
-    while (buffer.size() > 0) {
-      Thread.sleep(5000);
-      if (available(list)) {
-        Drone driver = defineDroneOfDelivery(list, delivery.getStart());
-        driver.setAvailable(false);
-        sendDelivery(delivery, driver, list);
-      } else {
-        buffer.push(delivery);
-      }
-    }
-    removeFromServerList(drone, client);
-    synchronized (drone) {
-      if (!drone.getSafe()) {
-        try {
-          drone.wait();
-        } catch (InterruptedException e) {
-          e.printStackTrace();
-        }
-      }
-    }
-    System.exit(0);
-  }
-
+  
   private boolean available(List<Drone> list) {
     return list.stream().anyMatch(Drone::getAvailable);
   }
 
-  private void cleanBeforeQuit(Drone drone, Client client, MqttClient mqttClient, List<Drone> list)
+  private void quit(Drone drone, Client client, MqttClient mqttClient, List<Drone> list)
       throws InterruptedException {
 
     new Thread(
@@ -671,8 +642,8 @@ public class MainProcess {
   }
 
   private Drone defineDroneOfDelivery(List<Drone> list, Point start) {
-    list.sort(Comparator.comparing(Drone::getBattery).thenComparing(Drone::getId));
-    list.sort(Collections.reverseOrder());
+    //list.sort(Comparator.comparing(Drone::getBattery).thenComparing(Drone::getId));
+    //list.sort(Collections.reverseOrder());
     return list.stream()
         .filter(Drone::getAvailable)
         .min(Comparator.comparing(d -> d.getPoint().distance(start)))
