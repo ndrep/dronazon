@@ -9,6 +9,7 @@ import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.WebResource;
 import io.grpc.*;
 import io.grpc.stub.StreamObserver;
+import services.InfoUpdatedImpl;
 
 import java.awt.*;
 import java.util.ArrayList;
@@ -16,12 +17,15 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
 
 public class RingController {
   private final List<Drone> list;
   private final Drone drone;
+    private static final Logger LOGGER = Logger.getLogger(RingController.class.getSimpleName());
 
-  public RingController(List<Drone> list, Drone drone) {
+
+    public RingController(List<Drone> list, Drone drone) {
     this.list = list;
     this.drone = drone;
   }
@@ -44,6 +48,12 @@ public class RingController {
     public boolean available(List<Drone> list) {
         synchronized (list) {
             return list.stream().anyMatch(Drone::getAvailable);
+        }
+    }
+
+    public void free(List<Drone> list){
+        synchronized (list){
+            list.notifyAll();
         }
     }
 
@@ -186,7 +196,6 @@ public class RingController {
             });
     channel.shutdown();
   }
-
 
   public Drone searchDroneInList(Drone drone, List<Drone> list) {
     return list.stream().filter(d -> d.getId() == drone.getId()).findFirst().orElse(null);

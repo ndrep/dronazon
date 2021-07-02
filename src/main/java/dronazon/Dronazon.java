@@ -33,7 +33,7 @@ public class Dronazon {
         System.out.println("ORDER: " + payload);
         client.publish(topic, message);
 
-        Thread.sleep(5000);
+        Thread.sleep(4000);
       }
 
     } catch (Exception e) {

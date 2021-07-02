@@ -107,6 +107,7 @@ public class MainProcess {
             () -> {
               while (true) {
                 try {
+                  LOGGER.info(buffer.size() + "");
                   Delivery delivery = buffer.pop();
                   if (manager.available(list)) {
                     Drone driver = manager.defineDroneOfDelivery(list, delivery.getStart());
@@ -115,8 +116,11 @@ public class MainProcess {
                   } else {
                     buffer.push(delivery);
                   }
-                  if (list.size() == 1) {
-                    list.get(0).setAvailable(true);
+                  synchronized (list){
+                    if (!manager.available(list)){
+                      LOGGER.info("ASPETTO CHE UN DRONE SI LIBERI");
+                      list.wait();
+                    }
                   }
 
                 } catch (InterruptedException e) {
@@ -144,7 +148,12 @@ public class MainProcess {
                   while (buffer.size() > 0) {
                     Delivery delivery = buffer.pop();
                     Thread.sleep(5000);
-                    if (manager.available(list)) {
+                    if (!manager.available(list)) {
+                      synchronized (list) {
+                        LOGGER.info("STO USCENDO, ASPETTO CHE UN DRONE SI LIBERI");
+                        list.wait();
+                      }
+                    } else if (manager.available(list)) {
                       Drone driver = manager.defineDroneOfDelivery(list, delivery.getStart());
                       driver.setAvailable(false);
                       controller.sendDelivery(delivery, driver, list);
@@ -261,7 +270,7 @@ public class MainProcess {
             .addService(new DroneMasterImpl(drone, list))
             .addService(new DronePresentationImpl(drone, list))
             .addService(new DroneDeliveryImpl(drone, list, client, buffer))
-            .addService(new InfoUpdatedImpl(drone, list))
+            .addService(new InfoUpdatedImpl(drone, list, client))
             .addService(new DroneCheckImpl())
             .addService(new StartElectionImpl(drone, list))
             .addService(new EndElectionImpl(drone, list, client))
