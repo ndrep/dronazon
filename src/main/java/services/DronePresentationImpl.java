@@ -8,19 +8,14 @@ import io.grpc.stub.StreamObserver;
 import java.awt.*;
 import java.util.Comparator;
 import java.util.List;
-import java.util.logging.Logger;
 import process.RingController;
 
 public class DronePresentationImpl extends DronePresentationImplBase {
 
   private final List<Drone> list;
-  private final Drone drone;
   private final RingController manager;
-  private static final Logger LOGGER =
-      Logger.getLogger(DronePresentationImpl.class.getSimpleName());
 
   public DronePresentationImpl(Drone drone, List<Drone> list) {
-    this.drone = drone;
     this.list = list;
     manager = new RingController(list, drone);
   }
@@ -28,23 +23,20 @@ public class DronePresentationImpl extends DronePresentationImplBase {
   @Override
   public void info(Hello.Drone request, StreamObserver<Empty> responseObserver) {
     try {
-      Drone hello = new Drone(request.getId(), request.getPort(), request.getAddress());
-      if (isMasterDrone()) {
-        hello.setPoint(new Point(request.getX(), request.getY()));
-        hello.setAvailable(true);
-        manager.free(list);
-        LOGGER.info("E' ENTRATO UN NUOVO DRONE");
+      Drone drone = new Drone(request.getId(), request.getPort(), request.getAddress());
+      if (manager.isMasterDrone()) {
+        drone.setPoint(new Point(request.getX(), request.getY()));
+        drone.setAvailable(true);
+        synchronized (list) {
+          list.notifyAll();
+        }
       }
-      list.add(hello);
+      list.add(drone);
       list.sort(Comparator.comparing(Drone::getId));
     } catch (Exception e) {
       e.printStackTrace();
     }
     responseObserver.onNext(Empty.newBuilder().build());
     responseObserver.onCompleted();
-  }
-
-  private boolean isMasterDrone() {
-    return drone.getIdMaster() == drone.getId();
   }
 }

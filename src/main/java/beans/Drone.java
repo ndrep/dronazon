@@ -6,6 +6,8 @@ import java.util.List;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlRootElement;
+
+import com.sun.jersey.api.client.Client;
 import org.codehaus.jackson.annotate.JsonIgnore;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
@@ -28,7 +30,8 @@ public class Drone implements Comparable<Drone> {
   @JsonIgnore private boolean safe = true;
   @JsonIgnore private boolean election = false;
   @JsonIgnore private final Queue buffer = new Queue();
-  @JsonIgnore private MqttClient client = null;
+  @JsonIgnore private MqttClient mqttClient = null;
+  @JsonIgnore private Client client = null;
   @JsonIgnore private List<Double> bufferPM10 = new ArrayList<>();
 
   public Drone() {}
@@ -37,6 +40,14 @@ public class Drone implements Comparable<Drone> {
     this.id = id;
     this.port = port;
     this.address = address;
+  }
+
+  public void setClient(Client client) {
+    this.client = client;
+  }
+
+  public Client getClient() {
+    return client;
   }
 
   public int getId() {
@@ -143,15 +154,15 @@ public class Drone implements Comparable<Drone> {
   }
 
   public MqttClient connect() throws MqttException {
-    this.client = new MqttClient("tcp://localhost:1883", MqttClient.generateClientId());
+    mqttClient = new MqttClient("tcp://localhost:1883", MqttClient.generateClientId());
     MqttConnectOptions connOpts = new MqttConnectOptions();
     connOpts.setCleanSession(true);
-    this.client.connect(connOpts);
-    return this.client;
+    mqttClient.connect(connOpts);
+    return mqttClient;
   }
 
-  public MqttClient getClient() {
-    return client;
+  public MqttClient getMqttClient() {
+    return mqttClient;
   }
 
   @Override

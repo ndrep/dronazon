@@ -11,15 +11,18 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 import process.MainProcess;
+import process.RingController;
 
 public class StartElectionImpl extends StartElectionImplBase {
   private final Drone drone;
   private final List<Drone> list;
+  private final RingController manager;
   private static final Logger LOGGER = Logger.getLogger(MainProcess.class.getSimpleName());
 
   public StartElectionImpl(Drone drone, List<Drone> list) {
     this.drone = drone;
     this.list = list;
+    manager = new RingController(list, drone);
   }
 
   @Override
@@ -50,7 +53,7 @@ public class StartElectionImpl extends StartElectionImplBase {
 
   private void startElectionMessage(Drone drone, Drone tmp, List<Drone> list)
       throws InterruptedException {
-    Drone next = nextDrone(drone, list);
+    Drone next = manager.nextDrone(drone, list);
 
     Context.current()
         .fork()
@@ -100,7 +103,7 @@ public class StartElectionImpl extends StartElectionImplBase {
   }
 
   private void endElectionMessage(Drone drone, List<Drone> list) {
-    Drone next = nextDrone(drone, list);
+    Drone next = manager.nextDrone(drone, list);
 
     Context.current()
         .fork()
@@ -149,14 +152,5 @@ public class StartElectionImpl extends StartElectionImplBase {
                     }
                   });
             });
-  }
-
-  private Drone nextDrone(Drone drone, List<Drone> list) {
-    int index = list.indexOf(searchDroneInList(drone, list));
-    return list.get((index + 1) % list.size());
-  }
-
-  private Drone searchDroneInList(Drone drone, List<Drone> list) {
-    return list.stream().filter(d -> d.getId() == drone.getId()).findFirst().orElse(null);
   }
 }

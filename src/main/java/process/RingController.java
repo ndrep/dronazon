@@ -10,6 +10,7 @@ import com.sun.jersey.api.client.WebResource;
 import io.grpc.*;
 import io.grpc.stub.StreamObserver;
 import java.awt.*;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -25,8 +26,23 @@ public class RingController {
     this.drone = drone;
   }
 
+  public void updateDroneInfo(Hello.Delivery request, Timestamp timestamp) {
+    drone.setBattery(drone.getBattery() - 10);
+    drone.setTot_delivery(drone.getTot_delivery() + 1);
+    drone.setTimestamp(timestamp.toString());
+    Point start = new Point(request.getStartX(), request.getStartY());
+    Point end = new Point(request.getEndX(), request.getEndY());
+    double distance = drone.getPoint().distance(start) + start.distance(end);
+    drone.setTot_km(drone.getTot_km() + distance);
+    drone.setPoint(end);
+  }
+
   public Drone getMaster(Drone drone, List<Drone> list) {
     return list.stream().filter(d -> d.getId() == drone.getIdMaster()).findFirst().orElse(null);
+  }
+
+  public Drone getDriver(Hello.Delivery request) {
+    return list.stream().filter(d -> d.getId() == request.getIdDriver()).findFirst().orElse(null);
   }
 
   public void updateNewMasterInList() {
@@ -47,10 +63,8 @@ public class RingController {
     }
   }
 
-  public void free(List<Drone> list) {
-    synchronized (list) {
-      list.notifyAll();
-    }
+  public boolean isMasterDrone() {
+    return drone.getIdMaster() == drone.getId();
   }
 
   public Drone defineDroneOfDelivery(List<Drone> list, Point start) {
@@ -63,8 +77,8 @@ public class RingController {
         .orElse(null);
   }
 
-  public void removeFromServerList(Drone drone, Client client) {
-    WebResource webResource = client.resource("http://localhost:6789" + "/api/remove");
+  public void removeFromServerList(Drone drone) {
+    WebResource webResource = drone.getClient().resource("http://localhost:6789" + "/api/remove");
     ClientResponse response =
         webResource.type("application/json").post(ClientResponse.class, drone.getId());
 
