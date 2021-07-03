@@ -14,6 +14,8 @@ import java.awt.*;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
+
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import process.Queue;
@@ -51,20 +53,24 @@ public class InfoUpdatedImpl extends InfoUpdatedImplBase {
       updated.setAvailable(false);
       quitMaster(drone.getClient());
     } else {
-      manager.free(list);
+      //manager.free(list);
+      synchronized (list){
+        list.notifyAll();
+      }
     }
   }
 
   public void quitMaster(MqttClient mqttClient) {
     try {
-      mqttClient.disconnect();
+      if (mqttClient.isConnected()){
+        mqttClient.disconnect();
+      }
+
       Queue buffer = drone.getBuffer();
-      while (buffer.size() > 0) {
-        if (!manager.available(list)) {
+      while (buffer.size() > 0 || !manager.available(list.stream().filter(d -> d.getId() != d.getIdMaster()).collect(Collectors.toList()))) {
           synchronized (list) {
             list.wait();
           }
-        }
       }
     } catch (MqttException | InterruptedException mqttException) {
       mqttException.printStackTrace();

@@ -108,7 +108,6 @@ public class MainProcess {
                   Delivery delivery = buffer.pop();
                   if (!manager.available(list)) {
                     synchronized (list) {
-                      LOGGER.info("ASPETTO CHE UN DRONE SI LIBERI");
                       buffer.push(delivery);
                       list.wait();
                     }
@@ -138,13 +137,13 @@ public class MainProcess {
               }
               if (manager.isMaster(drone.getId(), drone.getIdMaster())) {
                 try {
-                  mqttClient.disconnect();
+                  if (mqttClient.isConnected()){
+                    mqttClient.disconnect();
+                  }
                   Queue buffer = drone.getBuffer();
-                  while (buffer.size() > 0) {
-                    if (!manager.available(list)) {
-                      synchronized (list) {
-                        list.wait();
-                      }
+                  while (buffer.size() > 0 || !manager.available(list)) {
+                    synchronized (list) {
+                      list.wait();
                     }
                   }
 

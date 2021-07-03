@@ -32,8 +32,10 @@ public class DronePresentationImpl extends DronePresentationImplBase {
       if (isMasterDrone()) {
         hello.setPoint(new Point(request.getX(), request.getY()));
         hello.setAvailable(true);
-        manager.free(list);
-        LOGGER.info("E' ENTRATO UN NUOVO DRONE");
+        synchronized (list){
+          list.notifyAll();
+        }
+
       }
       list.add(hello);
       list.sort(Comparator.comparing(Drone::getId));
