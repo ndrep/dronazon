@@ -156,7 +156,7 @@ public class Drone implements Comparable<Drone> {
 
   @Override
   public String toString() {
-    return "id=" + id + ", battery=" + battery;
+    return "id=" + id + ", battery=" + battery + ", available=" + available;
   }
 
   public String printPoint() {

@@ -82,7 +82,6 @@ public class InfoUpdatedImpl extends InfoUpdatedImplBase {
           Drone driver = manager.defineDroneOfDelivery(list, delivery.getStart());
           driver.setAvailable(false);
           sendDelivery(delivery, driver, list);
-
         } else {
             buffer.push(delivery);
           }
@@ -108,7 +107,6 @@ public class InfoUpdatedImpl extends InfoUpdatedImplBase {
   private void updateDroneInfoInList(DroneInfo request, Drone updated) {
     synchronized (list) {
       updated.setAvailable(true);
-      updated.setElection(false);
       updated.setBattery(request.getBattery());
       updated.setPoint(new Point(request.getX(), request.getY()));
       updated.setTot_km(request.getKm());

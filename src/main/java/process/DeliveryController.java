@@ -96,10 +96,13 @@ public class DeliveryController {
                                                             && ((StatusRuntimeException) t).getStatus().getCode()
                                                             == Status.UNAVAILABLE.getCode()) {
 
-                                                        list.remove(next);
-
-                                                        sendDelivery(delivery, driver, list);
+                                                        if (next.getId() != drone.getIdMaster()) {
+                                                            list.remove(next);
+                                                            sendDelivery(delivery, driver, list);
+                                                            channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                                                        }
                                                         channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+
                                                     }
                                                 } catch (InterruptedException e) {
                                                     channel.shutdownNow();

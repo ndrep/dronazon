@@ -7,8 +7,6 @@ import com.example.grpc.DroneDeliveryGrpc.*;
 import com.example.grpc.DroneMasterGrpc.*;
 import com.example.grpc.DronePresentationGrpc.*;
 import com.example.grpc.Hello.*;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.sun.jersey.api.client.Client;
 import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.GenericType;
@@ -107,20 +105,18 @@ public class MainProcess {
             () -> {
               while (true) {
                 try {
-                  LOGGER.info(buffer.size() + "");
+                  LOGGER.info("CONSEGNE PENDENTI: " + buffer.size());
                   Delivery delivery = buffer.pop();
-                  if (manager.available(list)) {
+                  if (!manager.available(list)) {
+                    synchronized (list) {
+                      LOGGER.info("ASPETTO CHE UN DRONE SI LIBERI");
+                      buffer.push(delivery);
+                      list.wait();
+                    }
+                  } else {
                     Drone driver = manager.defineDroneOfDelivery(list, delivery.getStart());
                     driver.setAvailable(false);
                     controller.sendDelivery(delivery, driver, list);
-                  } else {
-                    buffer.push(delivery);
-                  }
-                  synchronized (list){
-                    if (!manager.available(list)){
-                      LOGGER.info("ASPETTO CHE UN DRONE SI LIBERI");
-                      list.wait();
-                    }
                   }
 
                 } catch (InterruptedException e) {
@@ -128,7 +124,7 @@ public class MainProcess {
                 }
               }
             })
-        .start();
+            .start();
   }
 
   private void quit(Drone drone, Client client, MqttClient mqttClient, List<Drone> list)
@@ -147,18 +143,16 @@ public class MainProcess {
                   Queue buffer = drone.getBuffer();
                   while (buffer.size() > 0) {
                     Delivery delivery = buffer.pop();
-                    Thread.sleep(5000);
                     if (!manager.available(list)) {
                       synchronized (list) {
                         LOGGER.info("STO USCENDO, ASPETTO CHE UN DRONE SI LIBERI");
+                        buffer.push(delivery);
                         list.wait();
                       }
-                    } else if (manager.available(list)) {
+                    } else {
                       Drone driver = manager.defineDroneOfDelivery(list, delivery.getStart());
                       driver.setAvailable(false);
                       controller.sendDelivery(delivery, driver, list);
-                    } else {
-                      buffer.push(delivery);
                     }
                   }
 
@@ -253,7 +247,7 @@ public class MainProcess {
     builder.append("TIMESTAMP: ").append(drone.getTimestamp()).append("\n");
     builder.append("BATTERY: ").append(drone.getBattery()).append("\n");
     builder.append("POSITION: ").append(drone.printPoint()).append("\n");
-    builder.append("SENSOR: ").append(drone.getBufferPM10()).append("\n");
+    //builder.append("SENSOR: ").append(drone.getBufferPM10()).append("\n");
     builder.append("LIST: ").append("[\n");
     for (Drone t : list) {
       builder.append(t.toString()).append(" \n");

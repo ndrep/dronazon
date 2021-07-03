@@ -37,6 +37,7 @@ public class RingController {
     public void updateNewMasterInList() {
         Drone master = searchDroneInList(drone, list);
         master.setElection(false);
+        master.setAvailable(true);
         master.setIdMaster(drone.getId());
         master.setBattery(drone.getBattery());
         master.setPoint(drone.getPoint());

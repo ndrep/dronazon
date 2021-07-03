@@ -1,28 +1,19 @@
 package services;
 
 import beans.Drone;
-import com.example.grpc.DroneDeliveryGrpc;
 import com.example.grpc.EndElectionGrpc;
 import com.example.grpc.EndElectionGrpc.*;
-import com.example.grpc.Hello;
 import com.example.grpc.Hello.*;
 import com.example.grpc.InfoUpdatedGrpc;
 import com.example.grpc.InfoUpdatedGrpc.*;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.sun.jersey.api.client.Client;
-import com.sun.jersey.api.client.ClientResponse;
-import com.sun.jersey.api.client.WebResource;
 import dronazon.Delivery;
 import io.grpc.*;
 import io.grpc.stub.StreamObserver;
 import java.awt.*;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
+import java.util.logging.Logger;
 
 import org.eclipse.paho.client.mqttv3.*;
 import process.DeliveryController;
@@ -31,12 +22,14 @@ import process.RingController;
 
 public class EndElectionImpl extends EndElectionImplBase {
   private final Drone drone;
-  private List<Drone> list;
+  private final List<Drone> list;
   private final Client client;
-  private RingController manager;
-  private DeliveryController controller;
+  private final RingController manager;
+  private final DeliveryController controller;
+    private static final Logger LOGGER = Logger.getLogger(DronePresentationImpl.class.getSimpleName());
 
-  public EndElectionImpl(Drone drone, List<Drone> list, Client client) {
+
+    public EndElectionImpl(Drone drone, List<Drone> list, Client client) {
     this.drone = drone;
     this.list = list;
     this.client = client;
@@ -48,8 +41,7 @@ public class EndElectionImpl extends EndElectionImplBase {
   @Override
   public void end(Elected request, StreamObserver<Empty> responseObserver) {
     if (drone.getId() == drone.getIdMaster() && !drone.getElection()) {
-      list.forEach(d -> d.setAvailable(false));
-      drone.setAvailable(true);
+      list.stream().filter(d -> d.getId() != drone.getIdMaster()).forEach(d -> d.setAvailable(false));
       drone.setElection(true);
       forwardElectionMessage(drone, list);
     } else if (drone.getId() != drone.getIdMaster()) {
@@ -57,11 +49,8 @@ public class EndElectionImpl extends EndElectionImplBase {
       forwardElectionMessage(drone, list);
     } else {
       try {
-        drone.setElection(false);
         manager.updateNewMasterInList();
         controller.takeDelivery(drone.getBuffer(), drone.connect());
-        //TODO AGGIUNTA
-        list = list.stream().filter(d -> !(!d.getAvailable() && d.getBattery()==100)).collect(Collectors.toList());
         startDelivery(list, drone.getBuffer());
       } catch (MqttException e) {
         e.printStackTrace();
@@ -180,29 +169,30 @@ public class EndElectionImpl extends EndElectionImplBase {
             });
   }
 
-
   private void startDelivery(List<Drone> list, Queue buffer) {
-    new Thread(
-            () -> {
-              while (true) {
-                try {
-                  Delivery delivery = buffer.pop();
-                  if (manager.available(list)) {
-                    Drone driver = manager.defineDroneOfDelivery(list, delivery.getStart());
-                    driver.setAvailable(false);
-                    controller.sendDelivery(delivery, driver, list);
-                  } else {
-                    buffer.push(delivery);
-                  }
-                  if (list.size() == 1) {
-                    list.get(0).setAvailable(true);
-                  }
+        new Thread(
+                () -> {
+                    while (true) {
+                        try {
+                            LOGGER.info("CONSEGNE PENDENTI: " + buffer.size());
+                            Delivery delivery = buffer.pop();
+                            if (!manager.available(list)) {
+                                synchronized (list) {
+                                    LOGGER.info("ASPETTO CHE UN DRONE SI LIBERI");
+                                    buffer.push(delivery);
+                                    list.wait();
+                                }
+                            } else {
+                                Drone driver = manager.defineDroneOfDelivery(list, delivery.getStart());
+                                driver.setAvailable(false);
+                                controller.sendDelivery(delivery, driver, list);
+                            }
 
-                } catch (InterruptedException e) {
-                  e.printStackTrace();
-                }
-              }
-            })
-        .start();
-  }
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                })
+                .start();
+    }
 }
