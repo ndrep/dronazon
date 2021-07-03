@@ -60,21 +60,10 @@ public class InfoUpdatedImpl extends InfoUpdatedImplBase {
       mqttClient.disconnect();
       Queue buffer = drone.getBuffer();
       while (buffer.size() > 0) {
-        LOGGER.info(buffer.size() + "");
-        dronazon.Delivery delivery = buffer.pop();
-        Thread.sleep(5000);
         if (!manager.available(list)) {
           synchronized (list) {
-            LOGGER.info("STO USCENDO, ASPETTO CHE UN DRONE SI LIBERI");
             list.wait();
           }
-        }
-        if (manager.available(list)) {
-          Drone driver = manager.defineDroneOfDelivery(list, delivery.getStart());
-          driver.setAvailable(false);
-          sendDelivery(delivery, driver, list);
-        } else {
-          buffer.push(delivery);
         }
       }
     } catch (MqttException | InterruptedException mqttException) {

@@ -141,17 +141,10 @@ public class MainProcess {
                   mqttClient.disconnect();
                   Queue buffer = drone.getBuffer();
                   while (buffer.size() > 0) {
-                    Delivery delivery = buffer.pop();
                     if (!manager.available(list)) {
                       synchronized (list) {
-                        LOGGER.info("STO USCENDO, ASPETTO CHE UN DRONE SI LIBERI");
-                        buffer.push(delivery);
                         list.wait();
                       }
-                    } else {
-                      Drone driver = manager.defineDroneOfDelivery(list, delivery.getStart());
-                      driver.setAvailable(false);
-                      controller.sendDelivery(delivery, driver, list);
                     }
                   }
 
