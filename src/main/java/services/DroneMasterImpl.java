@@ -4,15 +4,12 @@ import beans.Drone;
 import com.example.grpc.DroneMasterGrpc.DroneMasterImplBase;
 import com.example.grpc.Hello.*;
 import io.grpc.stub.StreamObserver;
-import java.util.List;
 
 public class DroneMasterImpl extends DroneMasterImplBase {
-  private final List<Drone> list;
   private final Drone drone;
 
-  public DroneMasterImpl(Drone drone, List<Drone> list) {
+  public DroneMasterImpl(Drone drone) {
     this.drone = drone;
-    this.list = list;
   }
 
   @Override

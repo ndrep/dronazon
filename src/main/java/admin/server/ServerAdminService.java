@@ -49,8 +49,14 @@ public class ServerAdminService {
   @Produces({"application/json"})
   public Response getMeanOfDelivery(@QueryParam("t1") String t1, @QueryParam("t2") String t2) {
     List<Statistics> list = StatisticsSmartCity.getInstance().getList();
-    list = list.stream().filter(s -> Timestamp.valueOf(s.getTimestamp()).after(Timestamp.valueOf(t1)) && Timestamp.valueOf(s.getTimestamp()).before(Timestamp.valueOf(t2))).collect(Collectors.toList());
-    double mean = list.stream().map(Statistics::getDelivery).reduce(0.0,Double::sum)/ list.size();
+    list =
+        list.stream()
+            .filter(
+                s ->
+                    Timestamp.valueOf(s.getTimestamp()).after(Timestamp.valueOf(t1))
+                        && Timestamp.valueOf(s.getTimestamp()).before(Timestamp.valueOf(t2)))
+            .collect(Collectors.toList());
+    double mean = list.stream().map(Statistics::getDelivery).reduce(0.0, Double::sum) / list.size();
     return Response.status(200).entity(mean).build();
   }
 
@@ -59,8 +65,14 @@ public class ServerAdminService {
   @Produces({"application/json"})
   public Response getMeanOfKm(@QueryParam("t1") String t1, @QueryParam("t2") String t2) {
     List<Statistics> list = StatisticsSmartCity.getInstance().getList();
-    list = list.stream().filter(s -> Timestamp.valueOf(s.getTimestamp()).after(Timestamp.valueOf(t1)) && Timestamp.valueOf(s.getTimestamp()).before(Timestamp.valueOf(t2))).collect(Collectors.toList());
-    double mean = list.stream().map(Statistics::getKm).reduce(0.0,Double::sum)/ list.size();
+    list =
+        list.stream()
+            .filter(
+                s ->
+                    Timestamp.valueOf(s.getTimestamp()).after(Timestamp.valueOf(t1))
+                        && Timestamp.valueOf(s.getTimestamp()).before(Timestamp.valueOf(t2)))
+            .collect(Collectors.toList());
+    double mean = list.stream().map(Statistics::getKm).reduce(0.0, Double::sum) / list.size();
     return Response.status(200).entity(mean).build();
   }
 

@@ -6,7 +6,6 @@ import com.example.grpc.EndElectionGrpc.*;
 import com.example.grpc.Hello.*;
 import com.example.grpc.InfoUpdatedGrpc;
 import com.example.grpc.InfoUpdatedGrpc.*;
-import com.sun.jersey.api.client.Client;
 import dronazon.Delivery;
 import io.grpc.*;
 import io.grpc.stub.StreamObserver;
@@ -14,7 +13,6 @@ import java.awt.*;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
-
 import org.eclipse.paho.client.mqttv3.*;
 import process.DeliveryController;
 import process.Queue;
@@ -23,25 +21,24 @@ import process.RingController;
 public class EndElectionImpl extends EndElectionImplBase {
   private final Drone drone;
   private final List<Drone> list;
-  private final Client client;
   private final RingController manager;
   private final DeliveryController controller;
-    private static final Logger LOGGER = Logger.getLogger(DronePresentationImpl.class.getSimpleName());
+  private static final Logger LOGGER =
+      Logger.getLogger(DronePresentationImpl.class.getSimpleName());
 
-
-    public EndElectionImpl(Drone drone, List<Drone> list, Client client) {
+  public EndElectionImpl(Drone drone, List<Drone> list) {
     this.drone = drone;
     this.list = list;
-    this.client = client;
     manager = new RingController(list, drone);
     controller = new DeliveryController(list, drone);
-
   }
 
   @Override
   public void end(Elected request, StreamObserver<Empty> responseObserver) {
     if (drone.getId() == drone.getIdMaster() && !drone.getElection()) {
-      list.stream().filter(d -> d.getId() != drone.getIdMaster()).forEach(d -> d.setAvailable(false));
+      list.stream()
+          .filter(d -> d.getId() != drone.getIdMaster())
+          .forEach(d -> d.setAvailable(false));
       drone.setElection(true);
       forwardElectionMessage(drone, list);
     } else if (drone.getId() != drone.getIdMaster()) {
@@ -170,29 +167,29 @@ public class EndElectionImpl extends EndElectionImplBase {
   }
 
   private void startDelivery(List<Drone> list, Queue buffer) {
-        new Thread(
-                () -> {
-                    while (true) {
-                        try {
-                            LOGGER.info("CONSEGNE PENDENTI: " + buffer.size());
-                            Delivery delivery = buffer.pop();
-                            if (!manager.available(list)) {
-                                synchronized (list) {
-                                    LOGGER.info("ASPETTO CHE UN DRONE SI LIBERI");
-                                    buffer.push(delivery);
-                                    list.wait();
-                                }
-                            } else {
-                                Drone driver = manager.defineDroneOfDelivery(list, delivery.getStart());
-                                driver.setAvailable(false);
-                                controller.sendDelivery(delivery, driver, list);
-                            }
-
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
-                        }
+    new Thread(
+            () -> {
+              while (true) {
+                try {
+                  LOGGER.info("CONSEGNE PENDENTI: " + buffer.size());
+                  Delivery delivery = buffer.pop();
+                  if (!manager.available(list)) {
+                    synchronized (list) {
+                      LOGGER.info("ASPETTO CHE UN DRONE SI LIBERI");
+                      buffer.push(delivery);
+                      list.wait();
                     }
-                })
-                .start();
-    }
+                  } else {
+                    Drone driver = manager.defineDroneOfDelivery(list, delivery.getStart());
+                    driver.setAvailable(false);
+                    controller.sendDelivery(delivery, driver, list);
+                  }
+
+                } catch (InterruptedException e) {
+                  e.printStackTrace();
+                }
+              }
+            })
+        .start();
+  }
 }

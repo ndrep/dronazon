@@ -3,7 +3,6 @@ package process;
 import beans.Drone;
 import beans.Statistics;
 import com.example.grpc.*;
-import com.example.grpc.DroneDeliveryGrpc.*;
 import com.example.grpc.DroneMasterGrpc.*;
 import com.example.grpc.DronePresentationGrpc.*;
 import com.example.grpc.Hello.*;
@@ -72,7 +71,7 @@ public class MainProcess {
       dp.startAllGrpcServices(dp.drone, dp.list, client, dp.drone.getBuffer());
       if (dp.manager.isMaster(dp.drone.getIdMaster(), dp.drone.getId())) {
         dp.controller.takeDelivery(dp.drone.getBuffer(), mqtt);
-        dp.startDelivery(dp.list, dp.drone.getBuffer(), client);
+        dp.startDelivery(dp.list, dp.drone.getBuffer());
       } else {
         dp.searchMasterInList(dp.drone, dp.list);
         dp.greeting(dp.drone, dp.list);
@@ -100,7 +99,7 @@ public class MainProcess {
     new PM10Simulator(pm10Buffer).start();
   }
 
-  private void startDelivery(List<Drone> list, Queue buffer, Client client) {
+  private void startDelivery(List<Drone> list, Queue buffer) {
     new Thread(
             () -> {
               while (true) {
@@ -124,7 +123,7 @@ public class MainProcess {
                 }
               }
             })
-            .start();
+        .start();
   }
 
   private void quit(Drone drone, Client client, MqttClient mqttClient, List<Drone> list)
@@ -220,12 +219,7 @@ public class MainProcess {
                             / list.size();
                     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
                     Statistics statistics =
-                        new Statistics(
-                            delivery,
-                            km,
-                            pm10,
-                            battery,
-                            timestamp.toString());
+                        new Statistics(delivery, km, pm10, battery, timestamp.toString());
 
                     webResource.type("application/json").post(ClientResponse.class, statistics);
                   }
@@ -247,7 +241,7 @@ public class MainProcess {
     builder.append("TIMESTAMP: ").append(drone.getTimestamp()).append("\n");
     builder.append("BATTERY: ").append(drone.getBattery()).append("\n");
     builder.append("POSITION: ").append(drone.printPoint()).append("\n");
-    //builder.append("SENSOR: ").append(drone.getBufferPM10()).append("\n");
+    // builder.append("SENSOR: ").append(drone.getBufferPM10()).append("\n");
     builder.append("LIST: ").append("[\n");
     for (Drone t : list) {
       builder.append(t.toString()).append(" \n");
@@ -261,13 +255,13 @@ public class MainProcess {
       throws IOException {
     Server service =
         ServerBuilder.forPort(drone.getPort())
-            .addService(new DroneMasterImpl(drone, list))
+            .addService(new DroneMasterImpl(drone))
             .addService(new DronePresentationImpl(drone, list))
             .addService(new DroneDeliveryImpl(drone, list, client, buffer))
             .addService(new InfoUpdatedImpl(drone, list, client))
             .addService(new DroneCheckImpl())
             .addService(new StartElectionImpl(drone, list))
-            .addService(new EndElectionImpl(drone, list, client))
+            .addService(new EndElectionImpl(drone, list))
             .build();
     service.start();
   }

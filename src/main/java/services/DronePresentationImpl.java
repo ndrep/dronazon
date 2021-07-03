@@ -5,20 +5,19 @@ import com.example.grpc.DronePresentationGrpc.*;
 import com.example.grpc.Hello;
 import com.example.grpc.Hello.Empty;
 import io.grpc.stub.StreamObserver;
-import process.RingController;
-
 import java.awt.*;
 import java.util.Comparator;
 import java.util.List;
 import java.util.logging.Logger;
+import process.RingController;
 
 public class DronePresentationImpl extends DronePresentationImplBase {
 
   private final List<Drone> list;
   private final Drone drone;
   private final RingController manager;
-  private static final Logger LOGGER = Logger.getLogger(DronePresentationImpl.class.getSimpleName());
-
+  private static final Logger LOGGER =
+      Logger.getLogger(DronePresentationImpl.class.getSimpleName());
 
   public DronePresentationImpl(Drone drone, List<Drone> list) {
     this.drone = drone;

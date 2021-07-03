@@ -3,7 +3,6 @@ package services;
 import beans.Drone;
 import com.example.grpc.DroneDeliveryGrpc;
 import com.example.grpc.DroneDeliveryGrpc.*;
-import com.example.grpc.Hello;
 import com.example.grpc.Hello.*;
 import com.example.grpc.InfoUpdatedGrpc;
 import com.example.grpc.InfoUpdatedGrpc.*;
@@ -14,18 +13,11 @@ import io.grpc.*;
 import io.grpc.stub.StreamObserver;
 import java.awt.*;
 import java.sql.Timestamp;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
-
-import org.eclipse.paho.client.mqttv3.MqttClient;
-import org.eclipse.paho.client.mqttv3.MqttException;
 import process.MainProcess;
 import process.Queue;
-import process.RingController;
 
 public class DroneDeliveryImpl extends DroneDeliveryImplBase {
   private final Drone drone;
@@ -33,14 +25,12 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
   private final Client client;
   private final Queue buffer;
   private static final Logger LOGGER = Logger.getLogger(MainProcess.class.getSimpleName());
-  private RingController manager;
 
   public DroneDeliveryImpl(Drone drone, List<Drone> list, Client client, Queue buffer) {
     this.drone = drone;
     this.list = list;
     this.client = client;
     this.buffer = buffer;
-    manager = new RingController(list, drone);
   }
 
   @Override
@@ -58,12 +48,6 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
                   list.remove(getDriver(request));
                   dronazon.Delivery delivery = updateDelivery(request);
                   buffer.push(delivery);
-                  // potrebbe capitare che il driver muore, il messaggio continua a girare nella
-                  // rete,
-                  // il master inserisce nuovamente il messaggio in coda e setta il driver come
-                  // disponibile
-                  // ma non lo trova perchè morto.
-                  // if (list.contains(getDriver(request))) getDriver(request).setAvailable(true);
                 } else {
                   forwardDelivery(request);
                 }
@@ -234,7 +218,7 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
                         }
 
                          */
-                          drone.setSafe(true);
+                        drone.setSafe(true);
                       } catch (InterruptedException e) {
                         e.printStackTrace();
                       }
@@ -247,13 +231,6 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
                   });
             });
   }
-
-
-
-
-
-
-
 
   private void removeFromServerList() {
     WebResource webResource = client.resource("http://localhost:6789" + "/api/remove");

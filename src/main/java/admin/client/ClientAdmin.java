@@ -4,14 +4,11 @@ import com.sun.jersey.api.client.Client;
 import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.WebResource;
 import com.sun.jersey.core.util.MultivaluedMapImpl;
-
-import java.sql.Timestamp;
 import java.util.Scanner;
 import javax.ws.rs.core.MultivaluedMap;
 
 public class ClientAdmin {
 
-  private static WebResource webResource;
   private static ClientResponse response;
 
   public static void main(String[] args) {
@@ -36,7 +33,7 @@ public class ClientAdmin {
 
         switch (option) {
           case "1":
-            webResource = client.resource(url + "/api/list_of_drones");
+            WebResource webResource = client.resource(url + "/api/list_of_drones");
             response = webResource.accept("application/json").get(ClientResponse.class);
 
             checkResponse();
@@ -62,11 +59,10 @@ public class ClientAdmin {
             System.out.println(menu);
             break;
           case "3":
-
             System.out.println("t1: ");
-            param.add("t1",sc.nextLine());
+            param.add("t1", sc.nextLine());
             System.out.println("t2: ");
-            param.add("t2",sc.nextLine());
+            param.add("t2", sc.nextLine());
 
             webResource = client.resource(url + "/api/mean_of_delivery").queryParams(param);
             response = webResource.accept("application/json").get(ClientResponse.class);
