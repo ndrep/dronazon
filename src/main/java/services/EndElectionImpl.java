@@ -11,7 +11,6 @@ import io.grpc.stub.StreamObserver;
 import java.awt.*;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
 import org.eclipse.paho.client.mqttv3.*;
 import process.DeliveryController;
 import process.RingController;
@@ -42,6 +41,7 @@ public class EndElectionImpl extends EndElectionImplBase {
       forwardElectionMessage(drone, list);
     } else {
       try {
+        drone.setSafe(true);
         manager.updateNewMasterInList();
         controller.takeDelivery(drone.getBuffer(), drone.connect());
         controller.startDelivery(list, drone.getBuffer());
@@ -101,6 +101,7 @@ public class EndElectionImpl extends EndElectionImplBase {
                     @Override
                     public void onCompleted() {
                       try {
+                        drone.setSafe(true);
                         channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
                       } catch (InterruptedException e) {
                         channel.shutdownNow();
@@ -139,7 +140,6 @@ public class EndElectionImpl extends EndElectionImplBase {
                             && ((StatusRuntimeException) t).getStatus().getCode()
                                 == Status.UNAVAILABLE.getCode()) {
                           list.remove(next);
-
                           forwardElectionMessage(drone, list);
                           channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
                         }

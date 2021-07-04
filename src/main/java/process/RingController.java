@@ -4,7 +4,6 @@ import beans.Drone;
 import com.example.grpc.CheckDroneGrpc;
 import com.example.grpc.Hello;
 import com.example.grpc.StartElectionGrpc;
-import com.sun.jersey.api.client.Client;
 import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.WebResource;
 import io.grpc.*;
@@ -157,6 +156,7 @@ public class RingController {
   }
 
   public void startElectionMessage(Drone drone, List<Drone> list) throws InterruptedException {
+    drone.setSafe(false);
     Drone next = nextDrone(drone, list);
 
     final ManagedChannel channel =
@@ -182,11 +182,13 @@ public class RingController {
                 && ((StatusRuntimeException) t).getStatus().getCode()
                     == Status.UNAVAILABLE.getCode()) {
               try {
+                list.remove(next);
                 startElectionMessage(drone, list);
+                channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
               } catch (InterruptedException e) {
                 e.printStackTrace();
               }
-            }
+            } else t.printStackTrace();
             try {
               channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
@@ -204,7 +206,6 @@ public class RingController {
             }
           }
         });
-    channel.shutdown();
   }
 
   public Drone searchDroneInList(Drone drone, List<Drone> list) {

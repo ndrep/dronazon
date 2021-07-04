@@ -1,13 +1,12 @@
 package beans;
 
+import com.sun.jersey.api.client.Client;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlRootElement;
-
-import com.sun.jersey.api.client.Client;
 import org.codehaus.jackson.annotate.JsonIgnore;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;

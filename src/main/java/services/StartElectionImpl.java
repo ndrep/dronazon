@@ -53,6 +53,7 @@ public class StartElectionImpl extends StartElectionImplBase {
 
   private void startElectionMessage(Drone drone, Drone tmp, List<Drone> list)
       throws InterruptedException {
+    drone.setSafe(false);
     Drone next = manager.nextDrone(drone, list);
 
     Context.current()
@@ -81,9 +82,10 @@ public class StartElectionImpl extends StartElectionImplBase {
                         if (t instanceof StatusRuntimeException
                             && ((StatusRuntimeException) t).getStatus().getCode()
                                 == Status.UNAVAILABLE.getCode()) {
+                          list.remove(next);
                           startElectionMessage(drone, tmp, list);
                           channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-                        }
+                        } else t.printStackTrace();
                       } catch (Exception e) {
                         channel.shutdownNow();
                         e.printStackTrace();

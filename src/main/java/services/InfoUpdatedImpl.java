@@ -14,7 +14,6 @@ public class InfoUpdatedImpl extends InfoUpdatedImplBase {
   private final Drone drone;
   private final RingController manager;
 
-
   public InfoUpdatedImpl(Drone drone, List<Drone> list) {
     this.list = list;
     this.drone = drone;
@@ -37,7 +36,7 @@ public class InfoUpdatedImpl extends InfoUpdatedImplBase {
       }
     } else if (request.getBattery() < 15 && request.getId() == drone.getIdMaster()) {
       updated.setAvailable(false);
-      new QuitMasterThread(drone,list).start();
+      new QuitMasterThread(drone, list).start();
     } else {
       synchronized (list) {
         list.notifyAll();

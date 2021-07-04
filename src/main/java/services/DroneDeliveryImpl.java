@@ -5,7 +5,6 @@ import com.example.grpc.DroneDeliveryGrpc.*;
 import com.example.grpc.Hello.*;
 import com.example.grpc.InfoUpdatedGrpc;
 import com.example.grpc.InfoUpdatedGrpc.*;
-import com.sun.jersey.api.client.Client;
 import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.WebResource;
 import io.grpc.*;
@@ -16,21 +15,18 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 import process.DeliveryController;
-import process.Queue;
 import process.RingController;
 
 public class DroneDeliveryImpl extends DroneDeliveryImplBase {
   private final Drone drone;
   private final List<Drone> list;
-  private final Queue buffer;
   private final RingController manager;
   private final DeliveryController controller;
   private static final Logger LOGGER = Logger.getLogger(DroneDeliveryImpl.class.getSimpleName());
 
-  public DroneDeliveryImpl(Drone drone, List<Drone> list, Queue buffer) {
+  public DroneDeliveryImpl(Drone drone, List<Drone> list) {
     this.drone = drone;
     this.list = list;
-    this.buffer = buffer;
     manager = new RingController(list, drone);
     controller = new DeliveryController(list, drone);
   }
@@ -49,7 +45,7 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
                   LOGGER.info("IL DRONE " + request.getIdDriver() + " DEVE ESSERE ELIMINATO");
                   list.remove(manager.getDriver(request));
                   dronazon.Delivery delivery = updateDelivery(request);
-                  buffer.push(delivery);
+                  drone.getBuffer().push(delivery);
                 } else {
                   controller.forwardDelivery(request);
                 }

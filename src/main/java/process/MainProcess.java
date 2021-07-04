@@ -74,7 +74,7 @@ public class MainProcess {
     }
 
     try {
-      dp.startAllGrpcServices(dp.drone, dp.list, dp.drone.getBuffer());
+      dp.startAllGrpcServices(dp.drone, dp.list);
       if (dp.manager.isMaster(dp.drone.getIdMaster(), dp.drone.getId())) {
         dp.controller.takeDelivery(dp.drone.getBuffer(), mqtt);
         dp.controller.startDelivery(dp.list, dp.drone.getBuffer());
@@ -83,8 +83,8 @@ public class MainProcess {
         dp.entranceInRing(dp.drone, dp.list);
       }
       dp.sensorStart();
-      dp.printInfo(dp.drone, dp.list);
-      dp.quit(dp.drone, dp.list);
+      dp.printDroneInfo(dp.drone, dp.list);
+      dp.typeQuitToExit(dp.drone, dp.list);
 
     } catch (IOException | InterruptedException e) {
       e.printStackTrace();
@@ -105,8 +105,7 @@ public class MainProcess {
     new PM10Simulator(pm10Buffer).start();
   }
 
-  private void quit(Drone drone, List<Drone> list)
-      throws InterruptedException {
+  private void typeQuitToExit(Drone drone, List<Drone> list) throws InterruptedException {
 
     new Thread(
             () -> {
@@ -116,7 +115,7 @@ public class MainProcess {
                 input = sc.nextLine().toLowerCase(Locale.ROOT);
               }
               if (manager.isMaster(drone.getId(), drone.getIdMaster())) {
-                new QuitMasterThread(drone,list).start();
+                new QuitMasterThread(drone, list).start();
               }
 
               manager.removeFromServerList(drone);
@@ -135,7 +134,7 @@ public class MainProcess {
         .start();
   }
 
-  private void printInfo(Drone drone, List<Drone> list) {
+  private void printDroneInfo(Drone drone, List<Drone> list) {
     new Thread(
             () -> {
               while (true) {
@@ -144,7 +143,8 @@ public class MainProcess {
                   Thread.sleep(10000);
                   buildMessage(drone, list);
                   if (drone.getId() == drone.getIdMaster()) {
-                    WebResource webResource = drone.getClient().resource("http://localhost:6789" + "/api/statistics");
+                    WebResource webResource =
+                        drone.getClient().resource("http://localhost:6789" + "/api/statistics");
 
                     double delivery =
                         (double)
@@ -209,13 +209,12 @@ public class MainProcess {
     LOGGER.info("\n" + builder + "\n");
   }
 
-  private void startAllGrpcServices(Drone drone, List<Drone> list, Queue buffer)
-      throws IOException {
+  private void startAllGrpcServices(Drone drone, List<Drone> list) throws IOException {
     Server service =
         ServerBuilder.forPort(drone.getPort())
             .addService(new DroneMasterImpl(drone))
             .addService(new DronePresentationImpl(drone, list))
-            .addService(new DroneDeliveryImpl(drone, list, buffer))
+            .addService(new DroneDeliveryImpl(drone, list))
             .addService(new InfoUpdatedImpl(drone, list))
             .addService(new DroneCheckImpl())
             .addService(new StartElectionImpl(drone, list))
