@@ -114,16 +114,36 @@ public class MainProcess {
               while (!input.equals("quit")) {
                 input = sc.nextLine().toLowerCase(Locale.ROOT);
               }
-              if (manager.isMaster(drone.getId(), drone.getIdMaster())) {
-                new QuitMasterThread(drone, list).start();
-              }
 
               manager.removeFromServerList(drone);
+
+              if (manager.isMaster(drone.getId(), drone.getIdMaster())) {
+                try {
+                  if (drone.getMqttClient().isConnected()) {
+                    drone.getMqttClient().disconnect();
+                  }
+
+                  Queue buffer = drone.getBuffer();
+                  while (buffer.size() > 0
+                          || !manager.available(
+                          list.stream()
+                                  .filter(d -> d.getId() != d.getIdMaster())
+                                  .collect(Collectors.toList()))) {
+                    synchronized (list) {
+                      list.wait();
+                    }
+                  }
+                } catch (MqttException | InterruptedException mqttException) {
+                  mqttException.printStackTrace();
+                }
+                System.exit(0);
+              }
 
               synchronized (drone) {
                 if (!drone.getSafe()) {
                   try {
                     drone.wait();
+                    System.exit(0);
                   } catch (InterruptedException e) {
                     e.printStackTrace();
                   }
@@ -191,6 +211,7 @@ public class MainProcess {
   }
 
   private void buildMessage(Drone drone, List<Drone> list) {
+
     StringBuilder builder = new StringBuilder();
     builder.append("ID: ").append(drone.getId()).append("\n");
     builder.append("MASTER: ").append(drone.getIdMaster()).append("\n");
@@ -199,7 +220,9 @@ public class MainProcess {
     builder.append("TIMESTAMP: ").append(drone.getTimestamp()).append("\n");
     builder.append("BATTERY: ").append(drone.getBattery()).append("\n");
     builder.append("POSITION: ").append(drone.printPoint()).append("\n");
-    builder.append("SENSOR: ").append(drone.getBufferPM10()).append("\n");
+    synchronized (drone.getBuffer()) {
+      builder.append("SENSOR: ").append(drone.getBufferPM10()).append("\n");
+    }
     builder.append("LIST: ").append("[\n");
     for (Drone t : list) {
       builder.append(t.toString()).append(" \n");
@@ -251,6 +274,11 @@ public class MainProcess {
 
   private void searchMasterInList(Drone drone, List<Drone> list) throws InterruptedException {
     Drone next = manager.nextDrone(drone, list);
+
+    if (next.getId() == drone.getId()){
+      manager.removeFromServerList(drone);
+      System.exit(0);
+    }
 
     Context.current()
         .fork()
@@ -310,52 +338,58 @@ public class MainProcess {
     List<Drone> clean =
         list.stream().filter(d -> d.getId() != drone.getId()).collect(Collectors.toList());
 
-    Context.current()
-        .fork()
-        .run(
-            () -> {
-              for (Drone d : clean) {
+    if (!clean.isEmpty()) {
+      Context.current()
+              .fork()
+              .run(
+                      () -> {
+                        for (Drone d : clean) {
 
-                final ManagedChannel channel =
-                    ManagedChannelBuilder.forTarget(d.getAddress() + ":" + d.getPort())
-                        .usePlaintext()
-                        .build();
+                          final ManagedChannel channel =
+                                  ManagedChannelBuilder.forTarget(d.getAddress() + ":" + d.getPort())
+                                          .usePlaintext()
+                                          .build();
 
-                DronePresentationStub stub = DronePresentationGrpc.newStub(channel);
+                          DronePresentationStub stub = DronePresentationGrpc.newStub(channel);
 
-                Hello.Drone request =
-                    Hello.Drone.newBuilder()
-                        .setId(drone.getId())
-                        .setPort(drone.getPort())
-                        .setAddress(drone.getAddress())
-                        .setX((int) drone.getPoint().getX())
-                        .setY((int) drone.getPoint().getY())
-                        .build();
+                          Hello.Drone request =
+                                  Hello.Drone.newBuilder()
+                                          .setId(drone.getId())
+                                          .setPort(drone.getPort())
+                                          .setAddress(drone.getAddress())
+                                          .setX((int) drone.getPoint().getX())
+                                          .setY((int) drone.getPoint().getY())
+                                          .build();
 
-                stub.info(
-                    request,
-                    new StreamObserver<Empty>() {
-                      public void onNext(Empty response) {}
+                          stub.info(
+                                  request,
+                                  new StreamObserver<Empty>() {
+                                    public void onNext(Empty response) {
+                                    }
 
-                      public void onError(Throwable t) {
-                        try {
-                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-                        } catch (InterruptedException e) {
-                          channel.shutdownNow();
+                                    public void onError(Throwable t) {
+                                      try {
+                                        channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                                      } catch (InterruptedException e) {
+                                        channel.shutdownNow();
+                                      }
+                                    }
+
+                                    public void onCompleted() {
+                                      try {
+                                        channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                                      } catch (InterruptedException e) {
+                                        channel.shutdownNow();
+                                        e.printStackTrace();
+                                      }
+                                    }
+                                  });
                         }
-                      }
-
-                      public void onCompleted() {
-                        try {
-                          channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-                        } catch (InterruptedException e) {
-                          channel.shutdownNow();
-                          e.printStackTrace();
-                        }
-                      }
-                    });
-              }
-            });
+                      });
+    }else {
+      manager.removeFromServerList(drone);
+      System.exit(0);
+    }
   }
 
   private ClientConfig config() {

@@ -6,7 +6,10 @@ import com.example.grpc.InfoUpdatedGrpc.InfoUpdatedImplBase;
 import io.grpc.stub.StreamObserver;
 import java.awt.*;
 import java.util.List;
-import process.QuitMasterThread;
+import java.util.stream.Collectors;
+
+import org.eclipse.paho.client.mqttv3.MqttException;
+import process.Queue;
 import process.RingController;
 
 public class InfoUpdatedImpl extends InfoUpdatedImplBase {
@@ -36,7 +39,27 @@ public class InfoUpdatedImpl extends InfoUpdatedImplBase {
       }
     } else if (request.getBattery() < 15 && request.getId() == drone.getIdMaster()) {
       updated.setAvailable(false);
-      new QuitMasterThread(drone, list).start();
+      manager.removeFromServerList(drone);
+      try {
+        if (drone.getMqttClient().isConnected()) {
+          drone.getMqttClient().disconnect();
+        }
+
+        Queue buffer = drone.getBuffer();
+        while (buffer.size() > 0
+                || !manager.available(
+                list.stream()
+                        .filter(d -> d.getId() != d.getIdMaster())
+                        .collect(Collectors.toList()))) {
+          synchronized (list) {
+            list.wait();
+          }
+        }
+      } catch (MqttException | InterruptedException mqttException) {
+        mqttException.printStackTrace();
+      }
+      System.exit(0);
+
     } else {
       synchronized (list) {
         list.notifyAll();
@@ -45,14 +68,16 @@ public class InfoUpdatedImpl extends InfoUpdatedImplBase {
   }
 
   private void updateDroneInfo(DroneInfo request, Drone updated) {
-    synchronized (list) {
-      updated.setAvailable(true);
-      updated.setBattery(request.getBattery());
-      updated.setPoint(new Point(request.getX(), request.getY()));
-      updated.setTot_km(request.getKm());
-      updated.setTot_delivery(request.getTotDelivery());
-      updated.setTimestamp(request.getTimestamp());
-      updated.setBufferPM10(request.getPm10List());
+    if (updated != null) {
+      synchronized (list) {
+        updated.setAvailable(true);
+        updated.setBattery(request.getBattery());
+        updated.setPoint(new Point(request.getX(), request.getY()));
+        updated.setTot_km(request.getKm());
+        updated.setTot_delivery(request.getTotDelivery());
+        updated.setTimestamp(request.getTimestamp());
+        updated.setBufferPM10(request.getPm10List());
+      }
     }
   }
 

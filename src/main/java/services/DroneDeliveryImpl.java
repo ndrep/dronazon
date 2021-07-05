@@ -11,6 +11,7 @@ import io.grpc.*;
 import io.grpc.stub.StreamObserver;
 import java.awt.*;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
@@ -123,6 +124,10 @@ public class DroneDeliveryImpl extends DroneDeliveryImplBase {
                     @Override
                     public void onCompleted() {
                       try {
+                          synchronized (drone.getBuffer()) {
+                              drone.setBufferPM10(new ArrayList<>());
+                              drone.setTot_km(0);
+                          }
                         if (drone.getBattery() < 15 && drone.getIdMaster() != drone.getId()) {
                           removeFromServerList();
 

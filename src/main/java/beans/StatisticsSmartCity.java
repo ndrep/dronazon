@@ -16,22 +16,22 @@ public class StatisticsSmartCity {
 
   private static StatisticsSmartCity manager;
 
-  public static StatisticsSmartCity getInstance() {
+  public static synchronized StatisticsSmartCity getInstance() {
     if (manager == null) {
       manager = new StatisticsSmartCity();
     }
     return manager;
   }
 
-  public ArrayList<Statistics> getList() {
+  public synchronized ArrayList<Statistics> getList() {
     return new ArrayList<>(list);
   }
 
-  public void setList(ArrayList<Statistics> list) {
+  public synchronized void setList(ArrayList<Statistics> list) {
     this.list = list;
   }
 
-  public ArrayList<Statistics> add(Statistics statistics) {
+  public synchronized ArrayList<Statistics> add(Statistics statistics) {
     if (list.stream()
             .filter(d -> d.getTimestamp().equals(statistics.getTimestamp()))
             .findFirst()
